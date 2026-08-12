@@ -1,0 +1,2741 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+>
+
+<title>Charadise Infinite World Painter</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  background: #dff4ff;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Noto Sans JP",
+    sans-serif;
+
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+/* =========================================================
+   無限世界
+   ========================================================= */
+
+#world {
+  position: fixed;
+  inset: 0;
+
+  overflow: hidden;
+
+  touch-action: none;
+
+  user-select: none;
+  -webkit-user-select: none;
+
+  cursor: crosshair;
+}
+
+/* =========================================================
+   2048タイル
+   ========================================================= */
+
+.tile {
+  position: absolute;
+
+  width: 2048px;
+  height: 2048px;
+
+  pointer-events: none;
+
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+
+  image-rendering: auto;
+
+  transform-origin: 0 0;
+}
+
+/* =========================================================
+   ツールバー
+   ========================================================= */
+
+#toolbar {
+  position: fixed;
+
+  z-index: 10000;
+
+  top: 10px;
+  left: 10px;
+  right: 10px;
+
+  display: flex;
+  align-items: center;
+
+  gap: 7px;
+
+  padding: 9px;
+
+  background: rgba(255,255,255,0.96);
+
+  border-radius: 15px;
+
+  box-shadow:
+    0 6px 28px rgba(0,0,0,0.16);
+
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  white-space: nowrap;
+
+  touch-action: pan-x;
+}
+
+button {
+  border: 0;
+
+  padding: 9px 12px;
+
+  border-radius: 10px;
+
+  background: #eeeeee;
+
+  color: #222;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  flex: 0 0 auto;
+
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+button.active {
+  background: #222;
+  color: white;
+}
+
+.separator {
+  width: 1px;
+  height: 30px;
+
+  background: #ddd;
+
+  flex: 0 0 auto;
+}
+
+/* =========================================================
+   プリセット
+   ========================================================= */
+
+#presets {
+  display: flex;
+  gap: 5px;
+}
+
+.preset {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+
+  padding: 7px 9px;
+}
+
+.presetColor {
+  width: 15px;
+  height: 15px;
+
+  border-radius: 50%;
+
+  border: 1px solid rgba(0,0,0,0.2);
+}
+
+/* =========================================================
+   カラー
+   ========================================================= */
+
+#colorPicker {
+  width: 44px;
+  height: 38px;
+
+  padding: 2px;
+
+  border: 0;
+
+  background: transparent;
+
+  flex: 0 0 auto;
+}
+
+#colorText {
+  width: 82px;
+
+  padding: 8px;
+
+  border: 1px solid #ddd;
+
+  border-radius: 9px;
+
+  font-family: monospace;
+
+  flex: 0 0 auto;
+}
+
+/* =========================================================
+   ブラシ
+   ========================================================= */
+
+#brushSize {
+  width: 110px;
+
+  flex: 0 0 auto;
+}
+
+#sizeText {
+  min-width: 45px;
+
+  text-align: center;
+
+  font-family: monospace;
+
+  font-size: 12px;
+  font-weight: bold;
+}
+
+/* =========================================================
+   ステータス
+   ========================================================= */
+
+#status {
+  position: fixed;
+
+  z-index: 10000;
+
+  left: 12px;
+  bottom: 12px;
+
+  padding: 9px 13px;
+
+  background: rgba(255,255,255,0.94);
+
+  border-radius: 11px;
+
+  box-shadow:
+    0 4px 18px rgba(0,0,0,0.12);
+
+  font-family: monospace;
+
+  font-size: 12px;
+  font-weight: bold;
+
+  pointer-events: none;
+
+  user-select: none;
+}
+
+/* =========================================================
+   座標
+   ========================================================= */
+
+#coordinates {
+  position: fixed;
+
+  z-index: 10000;
+
+  right: 12px;
+  bottom: 12px;
+
+  padding: 9px 13px;
+
+  background: rgba(255,255,255,0.94);
+
+  border-radius: 11px;
+
+  box-shadow:
+    0 4px 18px rgba(0,0,0,0.12);
+
+  font-family: monospace;
+
+  font-size: 12px;
+  font-weight: bold;
+
+  pointer-events: none;
+
+  user-select: none;
+}
+
+/* =========================================================
+   ダウンロードパネル
+   ========================================================= */
+
+#downloadPanel {
+  position: fixed;
+
+  z-index: 10001;
+
+  top: 75px;
+  right: 12px;
+
+  width: 300px;
+
+  display: none;
+
+  padding: 16px;
+
+  background: rgba(255,255,255,0.98);
+
+  border-radius: 15px;
+
+  box-shadow:
+    0 8px 35px rgba(0,0,0,0.2);
+}
+
+#downloadPanel.open {
+  display: block;
+}
+
+#downloadPanel h3 {
+  margin: 0 0 8px;
+
+  font-size: 15px;
+}
+
+#downloadPanel p {
+  margin: 5px 0 13px;
+
+  font-size: 12px;
+
+  line-height: 1.5;
+
+  opacity: 0.7;
+}
+
+#downloadTile {
+  width: 100%;
+
+  background: #222;
+  color: #fff;
+}
+
+/* =========================================================
+   スマホ
+   ========================================================= */
+
+@media (max-width: 700px) {
+
+  #toolbar {
+    top: 7px;
+    left: 7px;
+    right: 7px;
+
+    padding: 7px;
+  }
+
+  #status {
+    left: 7px;
+    bottom: 7px;
+  }
+
+  #coordinates {
+    right: 7px;
+    bottom: 7px;
+
+    max-width: 70vw;
+
+    overflow: hidden;
+  }
+
+  #downloadPanel {
+    top: 68px;
+
+    left: 8px;
+    right: 8px;
+
+    width: auto;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<!-- =======================================================
+     無限世界
+     ======================================================= -->
+
+<div id="world"></div>
+
+
+<!-- =======================================================
+     ツールバー
+     ======================================================= -->
+
+<div id="toolbar">
+
+  <button
+    id="paintTool"
+    class="active"
+    type="button"
+  >
+    🖌 ペイント
+  </button>
+
+  <button
+    id="panTool"
+    type="button"
+  >
+    ✋ 移動
+  </button>
+
+  <button
+    id="eyedropperTool"
+    type="button"
+  >
+    💧 スポイト
+  </button>
+
+
+  <div class="separator"></div>
+
+
+  <div id="presets">
+
+    <button
+      class="preset"
+      data-color="#3f9b4b"
+      type="button"
+    >
+      <span
+        class="presetColor"
+        style="background:#3f9b4b"
+      ></span>
+      緑地
+    </button>
+
+    <button
+      class="preset"
+      data-color="#4ca7d8"
+      type="button"
+    >
+      <span
+        class="presetColor"
+        style="background:#4ca7d8"
+      ></span>
+      海
+    </button>
+
+    <button
+      class="preset"
+      data-color="#d8bd68"
+      type="button"
+    >
+      <span
+        class="presetColor"
+        style="background:#d8bd68"
+      ></span>
+      砂漠
+    </button>
+
+    <button
+      class="preset"
+      data-color="#8b806e"
+      type="button"
+    >
+      <span
+        class="presetColor"
+        style="background:#8b806e"
+      ></span>
+      荒野
+    </button>
+
+    <button
+      class="preset"
+      data-color="#c94a2c"
+      type="button"
+    >
+      <span
+        class="presetColor"
+        style="background:#c94a2c"
+      ></span>
+      焔地
+    </button>
+
+    <button
+      class="preset"
+      data-color="#a9d9e8"
+      type="button"
+    >
+      <span
+        class="presetColor"
+        style="background:#a9d9e8"
+      ></span>
+      氷地
+    </button>
+
+    <button
+      class="preset"
+      data-color="#82c96b"
+      type="button"
+    >
+      <span
+        class="presetColor"
+        style="background:#82c96b"
+      ></span>
+      エデン
+    </button>
+
+    <button
+      class="preset"
+      data-color="#f4f7fa"
+      type="button"
+    >
+      <span
+        class="presetColor"
+        style="background:#f4f7fa"
+      ></span>
+      雪原
+    </button>
+
+  </div>
+
+
+  <div class="separator"></div>
+
+
+  <input
+    id="colorPicker"
+    type="color"
+    value="#3f9b4b"
+  >
+
+
+  <input
+    id="colorText"
+    type="text"
+    value="#3f9b4b"
+    maxlength="7"
+  >
+
+
+  <span id="sizeText">
+    30px
+  </span>
+
+
+  <input
+    id="brushSize"
+    type="range"
+    min="1"
+    max="300"
+    value="30"
+  >
+
+
+  <div class="separator"></div>
+
+
+  <button
+    id="clearTile"
+    type="button"
+  >
+    🗑 現在のタイルを消去
+  </button>
+
+
+  <button
+    id="downloadButton"
+    type="button"
+  >
+    💾 2048×2048
+  </button>
+
+</div>
+
+
+<!-- =======================================================
+     座標
+     ======================================================= -->
+
+<div id="coordinates">
+  X: 0&nbsp;&nbsp;Y: 0
+</div>
+
+
+<!-- =======================================================
+     状態
+     ======================================================= -->
+
+<div id="status">
+  IndexedDB: 起動中...
+</div>
+
+
+<!-- =======================================================
+     ダウンロード
+     ======================================================= -->
+
+<div id="downloadPanel">
+
+  <h3>
+    2048×2048 タイル
+  </h3>
+
+  <p>
+    現在位置のタイルをPNGとして保存します。
+    保存名は地図タイルと同じX/Y方式です。
+  </p>
+
+  <button
+    id="downloadTile"
+    type="button"
+  >
+    PNGをダウンロード
+  </button>
+
+</div>
+
+
+<script>
+
+/* ==========================================================
+   基本設定
+   ========================================================== */
+
+const TILE_SIZE = 2048;
+
+/*
+ * 画面表示倍率。
+ *
+ * データ自体は必ず2048×2048。
+ */
+const VIEW_SCALE = 0.5;
+
+
+/* ==========================================================
+   DOM
+   ========================================================== */
+
+const world =
+  document.getElementById("world");
+
+const status =
+  document.getElementById("status");
+
+const coordinates =
+  document.getElementById("coordinates");
+
+const paintTool =
+  document.getElementById("paintTool");
+
+const panTool =
+  document.getElementById("panTool");
+
+const eyedropperTool =
+  document.getElementById("eyedropperTool");
+
+const colorPicker =
+  document.getElementById("colorPicker");
+
+const colorText =
+  document.getElementById("colorText");
+
+const brushSize =
+  document.getElementById("brushSize");
+
+const sizeText =
+  document.getElementById("sizeText");
+
+const clearTile =
+  document.getElementById("clearTile");
+
+const downloadButton =
+  document.getElementById("downloadButton");
+
+const downloadPanel =
+  document.getElementById("downloadPanel");
+
+const downloadTile =
+  document.getElementById("downloadTile");
+
+
+/* ==========================================================
+   ツール
+   ========================================================== */
+
+let currentTool = "paint";
+
+
+function setTool(tool) {
+
+  currentTool = tool;
+
+  paintTool.classList.toggle(
+    "active",
+    tool === "paint"
+  );
+
+  panTool.classList.toggle(
+    "active",
+    tool === "pan"
+  );
+
+  eyedropperTool.classList.toggle(
+    "active",
+    tool === "eyedropper"
+  );
+
+
+  /*
+   * ペイント中は十字カーソル。
+   *
+   * 重要：
+   * paintモードではカメラを一切変更しない。
+   */
+
+  if (tool === "paint") {
+    world.style.cursor = "crosshair";
+  }
+
+  if (tool === "pan") {
+    world.style.cursor = "grab";
+  }
+
+  if (tool === "eyedropper") {
+    world.style.cursor = "copy";
+  }
+}
+
+
+paintTool.addEventListener(
+  "click",
+  () => setTool("paint")
+);
+
+panTool.addEventListener(
+  "click",
+  () => setTool("pan")
+);
+
+eyedropperTool.addEventListener(
+  "click",
+  () => setTool("eyedropper")
+);
+
+
+/* ==========================================================
+   カラー
+   ========================================================== */
+
+let currentColor = "#3f9b4b";
+
+
+function setColor(color) {
+
+  if (
+    !/^#[0-9a-fA-F]{6}$/.test(color)
+  ) {
+    return;
+  }
+
+  currentColor =
+    color.toLowerCase();
+
+  colorPicker.value =
+    currentColor;
+
+  colorText.value =
+    currentColor;
+}
+
+
+colorPicker.addEventListener(
+  "input",
+  () => {
+
+    setColor(
+      colorPicker.value
+    );
+
+  }
+);
+
+
+colorText.addEventListener(
+  "change",
+  () => {
+
+    let value =
+      colorText.value.trim();
+
+    if (
+      /^[0-9a-fA-F]{6}$/.test(value)
+    ) {
+      value =
+        "#" + value;
+    }
+
+    if (
+      /^#[0-9a-fA-F]{6}$/.test(value)
+    ) {
+
+      setColor(value);
+
+    } else {
+
+      colorText.value =
+        currentColor;
+
+    }
+
+  }
+);
+
+
+/* ==========================================================
+   地面プリセット
+   ========================================================== */
+
+document
+  .querySelectorAll(".preset")
+  .forEach(
+    button => {
+
+      button.addEventListener(
+        "click",
+        () => {
+
+          setColor(
+            button.dataset.color
+          );
+
+          /*
+           * 色を選んだら自動的に
+           * ペイントモードへ。
+           */
+
+          setTool("paint");
+
+        }
+      );
+
+    }
+  );
+
+
+/* ==========================================================
+   ブラシ
+   ========================================================== */
+
+let brushRadius =
+  Number(brushSize.value) / 2;
+
+
+brushSize.addEventListener(
+  "input",
+  () => {
+
+    brushRadius =
+      Number(
+        brushSize.value
+      ) / 2;
+
+    sizeText.textContent =
+      brushSize.value + "px";
+
+  }
+);
+
+
+/* ==========================================================
+   カメラ
+   ========================================================== */
+
+let cameraX = 0;
+let cameraY = 0;
+
+
+/* ==========================================================
+   IndexedDB
+   ========================================================== */
+
+const DB_NAME =
+  "CharadiseInfiniteWorld";
+
+const DB_VERSION =
+  1;
+
+const STORE_NAME =
+  "tiles";
+
+let db = null;
+
+
+/* ==========================================================
+   タイルパス
+   ========================================================== */
+
+/*
+ * これが地図サイトと同じX/Y方式。
+ *
+ * 例：
+ *
+ * tiles/0/0.png
+ * tiles/0/1.png
+ * tiles/-1/0.png
+ * tiles/10/-5.png
+ */
+
+function tilePath(
+  tx,
+  ty
+) {
+
+  return (
+    "tiles/" +
+    tx +
+    "/" +
+    ty +
+    ".png"
+  );
+}
+
+
+/*
+ * IndexedDBで使うキー。
+ *
+ * PNGのパスと対応する。
+ */
+
+function tileKey(
+  tx,
+  ty
+) {
+
+  return tilePath(
+    tx,
+    ty
+  );
+
+}
+
+
+/* ==========================================================
+   DB OPEN
+   ========================================================== */
+
+function openDatabase() {
+
+  return new Promise(
+    (resolve, reject) => {
+
+      const request =
+        indexedDB.open(
+          DB_NAME,
+          DB_VERSION
+        );
+
+
+      request.onupgradeneeded =
+        event => {
+
+          const database =
+            event.target.result;
+
+          if (
+            !database.objectStoreNames.contains(
+              STORE_NAME
+            )
+          ) {
+
+            database.createObjectStore(
+              STORE_NAME
+            );
+
+          }
+
+        };
+
+
+      request.onsuccess =
+        event => {
+
+          db =
+            event.target.result;
+
+          status.textContent =
+            "IndexedDB: 接続済み";
+
+          resolve(db);
+
+        };
+
+
+      request.onerror =
+        () => {
+
+          status.textContent =
+            "IndexedDB: エラー";
+
+          reject(
+            request.error
+          );
+
+        };
+
+    }
+  );
+}
+
+
+/* ==========================================================
+   DB GET
+   ========================================================== */
+
+function dbGet(key) {
+
+  return new Promise(
+    (resolve, reject) => {
+
+      const transaction =
+        db.transaction(
+          STORE_NAME,
+          "readonly"
+        );
+
+      const store =
+        transaction.objectStore(
+          STORE_NAME
+        );
+
+      const request =
+        store.get(key);
+
+
+      request.onsuccess =
+        () => {
+
+          resolve(
+            request.result || null
+          );
+
+        };
+
+
+      request.onerror =
+        () => {
+
+          reject(
+            request.error
+          );
+
+        };
+
+    }
+  );
+
+}
+
+
+/* ==========================================================
+   DB PUT
+   ========================================================== */
+
+function dbPut(
+  key,
+  blob
+) {
+
+  return new Promise(
+    (resolve, reject) => {
+
+      const transaction =
+        db.transaction(
+          STORE_NAME,
+          "readwrite"
+        );
+
+      const store =
+        transaction.objectStore(
+          STORE_NAME
+        );
+
+      const request =
+        store.put(
+          blob,
+          key
+        );
+
+
+      request.onsuccess =
+        () => resolve();
+
+
+      request.onerror =
+        () => {
+
+          reject(
+            request.error
+          );
+
+        };
+
+    }
+  );
+
+}
+
+
+/* ==========================================================
+   DB DELETE
+   ========================================================== */
+
+function dbDelete(key) {
+
+  return new Promise(
+    (resolve, reject) => {
+
+      const transaction =
+        db.transaction(
+          STORE_NAME,
+          "readwrite"
+        );
+
+      const store =
+        transaction.objectStore(
+          STORE_NAME
+        );
+
+      const request =
+        store.delete(key);
+
+
+      request.onsuccess =
+        () => resolve();
+
+
+      request.onerror =
+        () => {
+
+          reject(
+            request.error
+          );
+
+        };
+
+    }
+  );
+
+}
+
+
+/* ==========================================================
+   メモリ上のタイル
+   ========================================================== */
+
+const tiles =
+  new Map();
+
+
+/* ==========================================================
+   タイル作成
+   ========================================================== */
+
+function createTile(
+  tx,
+  ty
+) {
+
+  const canvas =
+    document.createElement(
+      "canvas"
+    );
+
+  canvas.width =
+    TILE_SIZE;
+
+  canvas.height =
+    TILE_SIZE;
+
+  canvas.className =
+    "tile";
+
+
+  const ctx =
+    canvas.getContext(
+      "2d",
+      {
+        willReadFrequently: true
+      }
+    );
+
+
+  const tile = {
+
+    tx,
+    ty,
+
+    canvas,
+
+    ctx,
+
+    dirty: false,
+
+    loaded: false,
+
+    loading: null
+
+  };
+
+
+  tiles.set(
+    tileKey(tx, ty),
+    tile
+  );
+
+
+  world.appendChild(
+    canvas
+  );
+
+
+  return tile;
+}
+
+
+/* ==========================================================
+   タイルロード
+   ========================================================== */
+
+async function loadTile(
+  tx,
+  ty
+) {
+
+  const key =
+    tileKey(tx, ty);
+
+
+  if (
+    tiles.has(key)
+  ) {
+
+    const existing =
+      tiles.get(key);
+
+    if (
+      existing.loading
+    ) {
+
+      await existing.loading;
+
+    }
+
+    return existing;
+  }
+
+
+  const tile =
+    createTile(
+      tx,
+      ty
+    );
+
+
+  tile.loading =
+    (async () => {
+
+      try {
+
+        const blob =
+          await dbGet(key);
+
+
+        if (blob) {
+
+          const url =
+            URL.createObjectURL(
+              blob
+            );
+
+
+          try {
+
+            const image =
+              new Image();
+
+            await new Promise(
+              (resolve, reject) => {
+
+                image.onload =
+                  resolve;
+
+                image.onerror =
+                  reject;
+
+                image.src =
+                  url;
+
+              }
+            );
+
+
+            tile.ctx.clearRect(
+              0,
+              0,
+              TILE_SIZE,
+              TILE_SIZE
+            );
+
+
+            tile.ctx.drawImage(
+              image,
+              0,
+              0
+            );
+
+          } finally {
+
+            URL.revokeObjectURL(
+              url
+            );
+
+          }
+
+        }
+
+      } catch (error) {
+
+        console.error(
+          "Tile load error:",
+          error
+        );
+
+      }
+
+
+      tile.loaded =
+        true;
+
+    })();
+
+
+  await tile.loading;
+
+  tile.loading =
+    null;
+
+
+  return tile;
+}
+
+
+/* ==========================================================
+   タイル保存
+   ========================================================== */
+
+const saveTimers =
+  new Map();
+
+
+function scheduleSave(
+  tile
+) {
+
+  const key =
+    tileKey(
+      tile.tx,
+      tile.ty
+    );
+
+
+  if (
+    saveTimers.has(key)
+  ) {
+
+    clearTimeout(
+      saveTimers.get(key)
+    );
+
+  }
+
+
+  const timer =
+    setTimeout(
+      () => {
+
+        saveTimers.delete(
+          key
+        );
+
+        saveTile(tile);
+
+      },
+      250
+    );
+
+
+  saveTimers.set(
+    key,
+    timer
+  );
+
+}
+
+
+async function saveTile(
+  tile
+) {
+
+  if (!db) {
+    return;
+  }
+
+
+  const blob =
+    await new Promise(
+      resolve => {
+
+        tile.canvas.toBlob(
+          resolve,
+          "image/png"
+        );
+
+      }
+    );
+
+
+  if (!blob) {
+    return;
+  }
+
+
+  try {
+
+    await dbPut(
+      tileKey(
+        tile.tx,
+        tile.ty
+      ),
+      blob
+    );
+
+
+    tile.dirty =
+      false;
+
+
+    status.textContent =
+      "IndexedDB: " +
+      tilePath(
+        tile.tx,
+        tile.ty
+      ) +
+      " 保存済み";
+
+  } catch (error) {
+
+    console.error(
+      error
+    );
+
+    status.textContent =
+      "IndexedDB: 保存エラー";
+
+  }
+
+}
+
+
+/* ==========================================================
+   画面 → 無限世界座標
+   ========================================================== */
+
+function screenToWorld(
+  screenX,
+  screenY
+) {
+
+  return {
+
+    x:
+      (
+        screenX -
+        window.innerWidth / 2 -
+        cameraX
+      ) / VIEW_SCALE,
+
+    y:
+      (
+        screenY -
+        window.innerHeight / 2 -
+        cameraY
+      ) / VIEW_SCALE
+
+  };
+
+}
+
+
+/* ==========================================================
+   世界座標 → タイル
+   ========================================================== */
+
+function getTilePosition(
+  worldX,
+  worldY
+) {
+
+  const tx =
+    Math.floor(
+      worldX /
+      TILE_SIZE
+    );
+
+
+  const ty =
+    Math.floor(
+      worldY /
+      TILE_SIZE
+    );
+
+
+  const x =
+    worldX -
+    tx * TILE_SIZE;
+
+
+  const y =
+    worldY -
+    ty * TILE_SIZE;
+
+
+  return {
+    tx,
+    ty,
+    x,
+    y
+  };
+
+}
+
+
+/* ==========================================================
+   ローカルペイント
+   ========================================================== */
+
+async function paintLocal(
+  tx,
+  ty,
+  x,
+  y,
+  radius
+) {
+
+  const tile =
+    await loadTile(
+      tx,
+      ty
+    );
+
+
+  const ctx =
+    tile.ctx;
+
+
+  ctx.save();
+
+  ctx.fillStyle =
+    currentColor;
+
+  ctx.beginPath();
+
+  ctx.arc(
+    x,
+    y,
+    radius,
+    0,
+    Math.PI * 2
+  );
+
+  ctx.fill();
+
+  ctx.restore();
+
+
+  tile.dirty =
+    true;
+
+
+  scheduleSave(
+    tile
+  );
+
+}
+
+
+/* ==========================================================
+   ペイント
+   ========================================================== */
+
+async function paintAt(
+  worldX,
+  worldY
+) {
+
+  /*
+   * ここでは cameraX / cameraY を
+   * 絶対に変更しない。
+   */
+
+  const position =
+    getTilePosition(
+      worldX,
+      worldY
+    );
+
+
+  const r =
+    brushRadius;
+
+
+  await paintLocal(
+    position.tx,
+    position.ty,
+    position.x,
+    position.y,
+    r
+  );
+
+
+  /*
+   * タイル境界。
+   */
+
+  if (
+    position.x - r < 0
+  ) {
+
+    await paintLocal(
+      position.tx - 1,
+      position.ty,
+      TILE_SIZE + position.x,
+      position.y,
+      r
+    );
+
+  }
+
+
+  if (
+    position.x + r > TILE_SIZE
+  ) {
+
+    await paintLocal(
+      position.tx + 1,
+      position.ty,
+      position.x - TILE_SIZE,
+      position.y,
+      r
+    );
+
+  }
+
+
+  if (
+    position.y - r < 0
+  ) {
+
+    await paintLocal(
+      position.tx,
+      position.ty - 1,
+      position.x,
+      TILE_SIZE + position.y,
+      r
+    );
+
+  }
+
+
+  if (
+    position.y + r > TILE_SIZE
+  ) {
+
+    await paintLocal(
+      position.tx,
+      position.ty + 1,
+      position.x,
+      position.y - TILE_SIZE,
+      r
+    );
+
+  }
+
+
+  /*
+   * 4隅。
+   */
+
+  if (
+    position.x - r < 0 &&
+    position.y - r < 0
+  ) {
+
+    await paintLocal(
+      position.tx - 1,
+      position.ty - 1,
+      TILE_SIZE + position.x,
+      TILE_SIZE + position.y,
+      r
+    );
+
+  }
+
+
+  if (
+    position.x + r > TILE_SIZE &&
+    position.y - r < 0
+  ) {
+
+    await paintLocal(
+      position.tx + 1,
+      position.ty - 1,
+      position.x - TILE_SIZE,
+      TILE_SIZE + position.y,
+      r
+    );
+
+  }
+
+
+  if (
+    position.x - r < 0 &&
+    position.y + r > TILE_SIZE
+  ) {
+
+    await paintLocal(
+      position.tx - 1,
+      position.ty + 1,
+      TILE_SIZE + position.x,
+      position.y - TILE_SIZE,
+      r
+    );
+
+  }
+
+
+  if (
+    position.x + r > TILE_SIZE &&
+    position.y + r > TILE_SIZE
+  ) {
+
+    await paintLocal(
+      position.tx + 1,
+      position.ty + 1,
+      position.x - TILE_SIZE,
+      position.y - TILE_SIZE,
+      r
+    );
+
+  }
+
+}
+
+
+/* ==========================================================
+   スポイト
+   ========================================================== */
+
+async function pickColor(
+  worldX,
+  worldY
+) {
+
+  const position =
+    getTilePosition(
+      worldX,
+      worldY
+    );
+
+
+  const tile =
+    await loadTile(
+      position.tx,
+      position.ty
+    );
+
+
+  const pixel =
+    tile.ctx.getImageData(
+      Math.floor(position.x),
+      Math.floor(position.y),
+      1,
+      1
+    ).data;
+
+
+  let r =
+    pixel[0];
+
+  let g =
+    pixel[1];
+
+  let b =
+    pixel[2];
+
+
+  if (
+    pixel[3] === 0
+  ) {
+
+    r = 255;
+    g = 255;
+    b = 255;
+
+  }
+
+
+  const hex =
+    "#" +
+    [r, g, b]
+      .map(
+        value =>
+          value
+            .toString(16)
+            .padStart(2, "0")
+      )
+      .join("");
+
+
+  setColor(hex);
+
+  setTool("paint");
+
+}
+
+
+/* ==========================================================
+   表示タイル更新
+   ========================================================== */
+
+function updateVisibleTiles() {
+
+  const centerX =
+    -cameraX /
+    VIEW_SCALE;
+
+
+  const centerY =
+    -cameraY /
+    VIEW_SCALE;
+
+
+  const halfWidth =
+    window.innerWidth /
+    VIEW_SCALE /
+    2;
+
+
+  const halfHeight =
+    window.innerHeight /
+    VIEW_SCALE /
+    2;
+
+
+  const minTX =
+    Math.floor(
+      (
+        centerX -
+        halfWidth
+      ) /
+      TILE_SIZE
+    ) - 1;
+
+
+  const maxTX =
+    Math.floor(
+      (
+        centerX +
+        halfWidth
+      ) /
+      TILE_SIZE
+    ) + 1;
+
+
+  const minTY =
+    Math.floor(
+      (
+        centerY -
+        halfHeight
+      ) /
+      TILE_SIZE
+    ) - 1;
+
+
+  const maxTY =
+    Math.floor(
+      (
+        centerY +
+        halfHeight
+      ) /
+      TILE_SIZE
+    ) + 1;
+
+
+  /*
+   * 必要なタイルをロード。
+   */
+
+  for (
+    let ty = minTY;
+    ty <= maxTY;
+    ty++
+  ) {
+
+    for (
+      let tx = minTX;
+      tx <= maxTX;
+      tx++
+    ) {
+
+      loadTile(
+        tx,
+        ty
+      );
+
+    }
+
+  }
+
+
+  /*
+   * 表示位置。
+   */
+
+  tiles.forEach(
+    tile => {
+
+      const screenX =
+        window.innerWidth / 2 +
+        cameraX +
+        tile.tx *
+        TILE_SIZE *
+        VIEW_SCALE;
+
+
+      const screenY =
+        window.innerHeight / 2 +
+        cameraY +
+        tile.ty *
+        TILE_SIZE *
+        VIEW_SCALE;
+
+
+      tile.canvas.style.transform =
+        "translate3d(" +
+        screenX +
+        "px," +
+        screenY +
+        "px,0) scale(" +
+        VIEW_SCALE +
+        ")";
+
+    }
+  );
+
+
+  /*
+   * 遠いタイルをDOMから解放。
+   *
+   * IndexedDBには残る。
+   */
+
+  tiles.forEach(
+    (tile, key) => {
+
+      if (
+        tile.tx < minTX - 2 ||
+        tile.tx > maxTX + 2 ||
+        tile.ty < minTY - 2 ||
+        tile.ty > maxTY + 2
+      ) {
+
+        if (
+          tile.dirty
+        ) {
+
+          saveTile(tile);
+
+        }
+
+        tile.canvas.remove();
+
+        tiles.delete(key);
+
+      }
+
+    }
+  );
+
+}
+
+
+/* ==========================================================
+   座標表示
+   ========================================================== */
+
+function updateCoordinates(
+  worldX,
+  worldY
+) {
+
+  const position =
+    getTilePosition(
+      worldX,
+      worldY
+    );
+
+
+  coordinates.textContent =
+    "X: " +
+    Math.floor(worldX) +
+    "  Y: " +
+    Math.floor(worldY) +
+    "  | Tile X: " +
+    position.tx +
+    "  Y: " +
+    position.ty;
+
+}
+
+
+/* ==========================================================
+   POINTER STATE
+   ========================================================== */
+
+let pointerDown =
+  false;
+
+let activePointerId =
+  null;
+
+let lastPointerX =
+  0;
+
+let lastPointerY =
+  0;
+
+let strokeStarted =
+  false;
+
+
+/* ==========================================================
+   POINTER DOWN
+   ========================================================== */
+
+world.addEventListener(
+  "pointerdown",
+  async event => {
+
+    /*
+     * 左クリックのみ。
+     */
+
+    if (
+      event.pointerType === "mouse" &&
+      event.button !== 0
+    ) {
+
+      return;
+
+    }
+
+
+    event.preventDefault();
+
+
+    pointerDown =
+      true;
+
+    activePointerId =
+      event.pointerId;
+
+    lastPointerX =
+      event.clientX;
+
+    lastPointerY =
+      event.clientY;
+
+    strokeStarted =
+      false;
+
+
+    world.setPointerCapture(
+      event.pointerId
+    );
+
+
+    /*
+     * ========================================================
+     * ペイント
+     * ========================================================
+     *
+     * ここではカメラを変更しない。
+     */
+
+    if (
+      currentTool === "paint"
+    ) {
+
+      const p =
+        screenToWorld(
+          event.clientX,
+          event.clientY
+        );
+
+
+      await paintAt(
+        p.x,
+        p.y
+      );
+
+
+      strokeStarted =
+        true;
+
+      return;
+    }
+
+
+    /*
+     * ========================================================
+     * スポイト
+     * ========================================================
+     */
+
+    if (
+      currentTool === "eyedropper"
+    ) {
+
+      const p =
+        screenToWorld(
+          event.clientX,
+          event.clientY
+        );
+
+
+      await pickColor(
+        p.x,
+        p.y
+      );
+
+
+      pointerDown =
+        false;
+
+      return;
+    }
+
+  },
+  {
+    passive: false
+  }
+);
+
+
+/* ==========================================================
+   POINTER MOVE
+   ========================================================== */
+
+world.addEventListener(
+  "pointermove",
+  async event => {
+
+    const p =
+      screenToWorld(
+        event.clientX,
+        event.clientY
+      );
+
+
+    updateCoordinates(
+      p.x,
+      p.y
+    );
+
+
+    if (
+      !pointerDown
+    ) {
+
+      return;
+
+    }
+
+
+    if (
+      event.pointerId !==
+      activePointerId
+    ) {
+
+      return;
+
+    }
+
+
+    event.preventDefault();
+
+
+    /*
+     * ========================================================
+     * ペイントモード
+     * ========================================================
+     *
+     * ★重要★
+     *
+     * ペイント中はここで
+     * cameraX / cameraY を変更しない。
+     *
+     * つまりドラッグしても
+     * 世界は動かず、
+     * ブラシだけが動く。
+     */
+
+    if (
+      currentTool === "paint"
+    ) {
+
+      await paintAt(
+        p.x,
+        p.y
+      );
+
+
+      lastPointerX =
+        event.clientX;
+
+      lastPointerY =
+        event.clientY;
+
+      return;
+    }
+
+
+    /*
+     * ========================================================
+     * 移動モード
+     * ========================================================
+     */
+
+    if (
+      currentTool === "pan"
+    ) {
+
+      const dx =
+        event.clientX -
+        lastPointerX;
+
+
+      const dy =
+        event.clientY -
+        lastPointerY;
+
+
+      cameraX += dx;
+
+      cameraY += dy;
+
+
+      lastPointerX =
+        event.clientX;
+
+      lastPointerY =
+        event.clientY;
+
+
+      updateVisibleTiles();
+
+      return;
+    }
+
+  },
+  {
+    passive: false
+  }
+);
+
+
+/* ==========================================================
+   POINTER UP
+   ========================================================== */
+
+world.addEventListener(
+  "pointerup",
+  event => {
+
+    if (
+      !pointerDown
+    ) {
+
+      return;
+
+    }
+
+
+    if (
+      event.pointerId !==
+      activePointerId
+    ) {
+
+      return;
+
+    }
+
+
+    event.preventDefault();
+
+
+    pointerDown =
+      false;
+
+
+    try {
+
+      world.releasePointerCapture(
+        event.pointerId
+      );
+
+    } catch (error) {
+    }
+
+
+    activePointerId =
+      null;
+
+  },
+  {
+    passive: false
+  }
+);
+
+
+/* ==========================================================
+   POINTER CANCEL
+   ========================================================== */
+
+world.addEventListener(
+  "pointercancel",
+  event => {
+
+    if (
+      event.pointerId ===
+      activePointerId
+    ) {
+
+      pointerDown =
+        false;
+
+      activePointerId =
+        null;
+
+    }
+
+  }
+);
+
+
+/* ==========================================================
+   右クリック禁止
+   ========================================================== */
+
+world.addEventListener(
+  "contextmenu",
+  event => {
+
+    event.preventDefault();
+
+  }
+);
+
+
+/* ==========================================================
+   CLEAR TILE
+   ========================================================== */
+
+clearTile.addEventListener(
+  "click",
+  async () => {
+
+    const center =
+      screenToWorld(
+        window.innerWidth / 2,
+        window.innerHeight / 2
+      );
+
+
+    const position =
+      getTilePosition(
+        center.x,
+        center.y
+      );
+
+
+    const tile =
+      await loadTile(
+        position.tx,
+        position.ty
+      );
+
+
+    tile.ctx.clearRect(
+      0,
+      0,
+      TILE_SIZE,
+      TILE_SIZE
+    );
+
+
+    tile.dirty =
+      false;
+
+
+    await dbDelete(
+      tileKey(
+        position.tx,
+        position.ty
+      )
+    );
+
+
+    status.textContent =
+      "消去: " +
+      tilePath(
+        position.tx,
+        position.ty
+      );
+
+  }
+);
+
+
+/* ==========================================================
+   DOWNLOAD PANEL
+   ========================================================== */
+
+downloadButton.addEventListener(
+  "click",
+  () => {
+
+    downloadPanel.classList.toggle(
+      "open"
+    );
+
+  }
+);
+
+
+/* ==========================================================
+   DOWNLOAD TILE
+   ========================================================== */
+
+downloadTile.addEventListener(
+  "click",
+  async () => {
+
+    const center =
+      screenToWorld(
+        window.innerWidth / 2,
+        window.innerHeight / 2
+      );
+
+
+    const position =
+      getTilePosition(
+        center.x,
+        center.y
+      );
+
+
+    const tile =
+      await loadTile(
+        position.tx,
+        position.ty
+      );
+
+
+    /*
+     * 最新状態を保存。
+     */
+
+    await saveTile(
+      tile
+    );
+
+
+    /*
+     * PNG化。
+     */
+
+    tile.canvas.toBlob(
+      blob => {
+
+        if (!blob) {
+
+          alert(
+            "PNGを作成できませんでした。"
+          );
+
+          return;
+
+        }
+
+
+        const url =
+          URL.createObjectURL(
+            blob
+          );
+
+
+        const a =
+          document.createElement(
+            "a"
+          );
+
+
+        /*
+         * 地図サイトと同じパス構造を
+         * ファイル名にも反映。
+         *
+         * tiles/15/-3.png
+         */
+
+        a.download =
+          tilePath(
+            position.tx,
+            position.ty
+          ).replace(
+            /\//g,
+            "_"
+          );
+
+
+        a.href =
+          url;
+
+
+        document.body.appendChild(
+          a
+        );
+
+
+        a.click();
+
+
+        a.remove();
+
+
+        setTimeout(
+          () => {
+
+            URL.revokeObjectURL(
+              url
+            );
+
+          },
+          1000
+        );
+
+
+        status.textContent =
+          "PNG出力: " +
+          tilePath(
+            position.tx,
+            position.ty
+          );
+
+      },
+      "image/png"
+    );
+
+  }
+);
+
+
+/* ==========================================================
+   RESIZE
+   ========================================================== */
+
+window.addEventListener(
+  "resize",
+  () => {
+
+    updateVisibleTiles();
+
+  }
+);
+
+
+/* ==========================================================
+   KEYBOARD
+   ========================================================== */
+
+document.addEventListener(
+  "keydown",
+  event => {
+
+    if (
+      event.target.tagName ===
+      "INPUT"
+    ) {
+
+      return;
+
+    }
+
+
+    const key =
+      event.key.toLowerCase();
+
+
+    if (
+      key === "p"
+    ) {
+
+      setTool(
+        "paint"
+      );
+
+    }
+
+
+    if (
+      key === "h"
+    ) {
+
+      setTool(
+        "pan"
+      );
+
+    }
+
+
+    if (
+      key === "i"
+    ) {
+
+      setTool(
+        "eyedropper"
+      );
+
+    }
+
+  }
+);
+
+
+/* ==========================================================
+   ページ終了前
+   ========================================================== */
+
+window.addEventListener(
+  "beforeunload",
+  () => {
+
+    tiles.forEach(
+      tile => {
+
+        if (
+          tile.dirty
+        ) {
+
+          saveTile(tile);
+
+        }
+
+      }
+    );
+
+  }
+);
+
+
+/* ==========================================================
+   起動
+   ========================================================== */
+
+async function initialize() {
+
+  try {
+
+    await openDatabase();
+
+
+    /*
+     * 最初のタイル。
+     */
+
+    await loadTile(
+      0,
+      0
+    );
+
+
+    updateVisibleTiles();
+
+
+    updateCoordinates(
+      0,
+      0
+    );
+
+
+    status.textContent =
+      "Charadise: IndexedDB保存中";
+
+
+  } catch (error) {
+
+    console.error(
+      error
+    );
+
+
+    status.textContent =
+      "IndexedDB: 使用不可";
+
+  }
+
+}
+
+
+initialize();
+
+</script>
+
+</body>
+</html>
