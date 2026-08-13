@@ -35,6 +35,533 @@
     }
 
     /*
+     * Leafletのズームボタンなどは全部消す
+     */
+    .leaflet-control-container {
+        display: none;
+    }
+
+    /*
+     * 地図タイルの隙間をなくす
+     */
+    .leaflet-tile {
+        width: 256px !important;
+        height: 256px !important;
+    }
+
+    /*
+     * タイトル
+     */
+    .title {
+        position: fixed;
+        z-index: 9999;
+
+        top: 18px;
+        left: 20px;
+
+        padding: 12px 18px;
+
+        border-radius: 16px;
+
+        background: rgba(255, 255, 255, 0.88);
+
+        box-shadow:
+            0 5px 20px rgba(0, 0, 0, 0.12);
+
+        font-family:
+            system-ui,
+            -apple-system,
+            BlinkMacSystemFont,
+            "Noto Sans JP",
+            sans-serif;
+
+        pointer-events: none;
+        user-select: none;
+    }
+
+    .title-main {
+        font-size: 21px;
+        font-weight: 700;
+    }
+
+    .title-sub {
+        margin-top: 3px;
+        font-size: 12px;
+        opacity: 0.65;
+    }
+
+    /*
+     * 座標表示
+     */
+    .coordinates {
+        position: fixed;
+        z-index: 9999;
+
+        top: 18px;
+        right: 20px;
+
+        min-width: 190px;
+
+        padding: 11px 15px;
+
+        border-radius: 14px;
+
+        background: rgba(255, 255, 255, 0.88);
+
+        box-shadow:
+            0 5px 20px rgba(0, 0, 0, 0.12);
+
+        font-family:
+            system-ui,
+            -apple-system,
+            BlinkMacSystemFont,
+            "Noto Sans JP",
+            sans-serif;
+
+        font-size: 13px;
+
+        pointer-events: none;
+        user-select: none;
+    }
+
+    .coordinate-title {
+        font-size: 11px;
+        opacity: 0.6;
+        margin-bottom: 4px;
+    }
+
+    .coordinate-value {
+        font-variant-numeric: tabular-nums;
+        line-height: 1.5;
+    }
+</style>
+
+</head>
+
+<body>
+
+<div id="map"></div>
+
+<div class="title">
+    <div class="title-main">
+        Charadise
+    </div>
+
+    <div class="title-sub">
+        キャラたちの楽園 — 永遠の土地
+    </div>
+</div>
+
+<!-- 座標表示 -->
+<div class="coordinates">
+    <div class="coordinate-title">
+        WORLD COORDINATES
+    </div>
+
+    <div class="coordinate-value">
+        X: <span id="coordinate-x">0</span>
+    </div>
+
+    <div class="coordinate-value">
+        Y: <span id="coordinate-y">0</span>
+    </div>
+
+    <div class="coordinate-value">
+        Tile: <span id="tile-x">0</span>, <span id="tile-y">0</span>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+
+/*
+============================================================
+    Charadise Infinite Tile World
+============================================================
+
+    1タイル = 256 × 256 px
+
+    例：
+
+         -1, -1      0, -1      1, -1
+
+         -1,  0      0,  0      1,  0
+
+         -1,  1      0,  1      1,  1
+
+
+    ファイル：
+
+    tiles/
+    ├── -1_-1.png
+    ├── 0_-1.png
+    ├── 1_-1.png
+    ├── -1_0.png
+    ├── 0_0.png
+    ├── 1_0.png
+    ├── -1_1.png
+    ├── 0_1.png
+    └── 1_1.png
+
+
+    X / Y 座標は無限に続く。
+*/
+
+
+/*
+============================================================
+    Leaflet本体
+============================================================
+*/
+
+const map = L.map("map", {
+
+    /*
+     * 通常の地球地図ではなく単純なXY平面
+     */
+    crs: L.CRS.Simple,
+
+    /*
+     * ズームは0だけ
+     */
+    zoom: 0,
+
+    minZoom: 0,
+    maxZoom: 0,
+
+    /*
+     * 初期位置
+     */
+    center: [128, 128],
+
+    zoomControl: false,
+
+    scrollWheelZoom: false,
+    doubleClickZoom: false,
+    touchZoom: false,
+    boxZoom: false,
+    keyboard: false,
+
+    maxBounds: undefined,
+
+    maxBoundsViscosity: 0
+});
+
+
+/*
+============================================================
+    無限タイルレイヤー
+============================================================
+*/
+
+const InfiniteWorldLayer = L.GridLayer.extend({
+
+    tileSize: 256,
+
+    /*
+     * 東西方向に勝手に世界を繰り返さない
+     */
+    noWrap: true,
+
+    bounds: undefined,
+
+    createTile: function(coords, done) {
+
+        /*
+         * Leafletのタイル座標
+         *
+         * coords.x = X
+         * coords.y = Y
+         */
+
+        const x = coords.x;
+        const y = coords.y;
+
+        const tile = document.createElement("img");
+
+        tile.width = 256;
+        tile.height = 256;
+
+        tile.alt = "";
+
+        /*
+         * タイルファイル
+         *
+         * 例：
+         *
+         * X = -2
+         * Y = 5
+         *
+         * → tiles/-2_5.png
+         */
+
+        tile.src =
+            "./tiles/" +
+            x +
+            "_" +
+            y +
+            ".png";
+
+
+        /*
+         * 読み込み成功
+         */
+
+        tile.onload = function() {
+
+            done(null, tile);
+
+        };
+
+
+        /*
+         * ファイルが存在しない場合
+         */
+
+        tile.onerror = function() {
+
+            const canvas =
+                document.createElement("canvas");
+
+            canvas.width = 256;
+            canvas.height = 256;
+
+            const context =
+                canvas.getContext("2d");
+
+            context.fillStyle = "#dff4ff";
+
+            context.fillRect(
+                0,
+                0,
+                256,
+                256
+            );
+
+            tile.src =
+                canvas.toDataURL("image/png");
+
+            tile.onload = function() {
+
+                done(null, tile);
+
+            };
+
+        };
+
+        return tile;
+    }
+});
+
+
+/*
+============================================================
+    無限世界を追加
+============================================================
+*/
+
+const world =
+    new InfiniteWorldLayer();
+
+world.addTo(map);
+
+
+/*
+============================================================
+    座標表示
+============================================================
+*/
+
+const coordinateX =
+    document.getElementById("coordinate-x");
+
+const coordinateY =
+    document.getElementById("coordinate-y");
+
+const tileX =
+    document.getElementById("tile-x");
+
+const tileY =
+    document.getElementById("tile-y");
+
+
+/*
+ * マウス位置から世界座標を計算
+ *
+ * LeafletのCRS.Simpleでは
+ *
+ * lat = Y
+ * lng = X
+ *
+ * として扱われる。
+ *
+ * 1タイル = 256座標単位。
+ */
+
+map.on("mousemove", function(event) {
+
+    const x = event.latlng.lng;
+    const y = event.latlng.lat;
+
+    /*
+     * 小数第2位まで表示
+     */
+    coordinateX.textContent =
+        x.toFixed(2);
+
+    coordinateY.textContent =
+        y.toFixed(2);
+
+
+    /*
+     * 現在いるタイル番号
+     *
+     * floor()を使うことで
+     * マイナス座標でも正しく判定する。
+     */
+
+    const currentTileX =
+        Math.floor(x / 256);
+
+    const currentTileY =
+        Math.floor(y / 256);
+
+    tileX.textContent =
+        currentTileX;
+
+    tileY.textContent =
+        currentTileY;
+
+});
+
+
+/*
+============================================================
+    マウスが地図から外れた場合
+============================================================
+*/
+
+map.on("mouseout", function() {
+
+    coordinateX.textContent = "—";
+    coordinateY.textContent = "—";
+
+    tileX.textContent = "—";
+    tileY.textContent = "—";
+
+});
+
+
+/*
+============================================================
+    初期位置
+============================================================
+*/
+
+map.setView(
+    [128, 128],
+    0,
+    {
+        animate: false
+    }
+);
+
+
+/*
+============================================================
+    ズーム完全禁止
+============================================================
+*/
+
+map.on("zoomstart", function() {
+
+    if (map.getZoom() !== 0) {
+
+        map.setZoom(
+            0,
+            {
+                animate: false
+            }
+        );
+
+    }
+
+});
+
+
+map.on("zoomend", function() {
+
+    if (map.getZoom() !== 0) {
+
+        map.setZoom(
+            0,
+            {
+                animate: false
+            }
+        );
+
+    }
+
+});
+
+
+/*
+============================================================
+    ホイール操作
+============================================================
+*/
+
+const mapElement =
+    document.getElementById("map");
+
+mapElement.addEventListener(
+    "wheel",
+    function(event) {
+
+        event.preventDefault();
+
+    },
+    {
+        passive: false
+    }
+);
+
+
+/*
+============================================================
+    右クリックメニューを無効化
+============================================================
+*/
+
+mapElement.addEventListener(
+    "contextmenu",
+    function(event) {
+
+        event.preventDefault();
+
+    }
+);
+
+
+/*
+============================================================
+    ピンは使用しない
+============================================================
+
+    座標は画面右上の表示だけで確認する。
+
+    L.marker()
+    L.circleMarker()
+    L.popup()
+
+    などは使用していない。
+*/
+
+</script>
+
+</body>
+</html>    /*
      * Leafletのコントロールを全部消す
      */
     .leaflet-control-container {
