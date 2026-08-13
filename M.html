@@ -61,26 +61,26 @@
             position: relative;
             width: 4000px;
             height: 2000px;
-            background: #7f8c8d;
+            background: #34495e; /* 背景（海の部分の見え方） */
             box-shadow: 0 4px 20px rgba(0,0,0,0.5);
         }
-        /* 画像を重ね合わせるためのレイヤー構造 */
+        /* レイヤー構造 */
         .canvas-container canvas, .canvas-container img {
             position: absolute;
             top: 0;
             left: 0;
             width: 4000px;
             height: 2000px;
-            image-rendering: pixelated; /* 拡大時もクッキリ表示 */
+            image-rendering: pixelated;
             pointer-events: none;
         }
-        /* 最前面のエディタキャンバスのみマウスイベントを受け付ける */
+        /* 最前面のキャンバスのみ操作可能 */
         #editor-canvas {
             pointer-events: auto;
             z-index: 10;
         }
-        #land-img { z-index: 1; mix-blend-mode: normal; }
-        #elev-img { z-index: 2; opacity: 0.5; mix-blend-mode: multiply; } /* 標高は乗算で重ねる例 */
+        #land-img { z-index: 1; }
+        #elev-img { z-index: 2; opacity: 0.4; mix-blend-mode: multiply; }
         
         .status-bar {
             background: #34495e;
@@ -94,7 +94,6 @@
 <body>
 
 <header>
-    <!-- 画像アップロード -->
     <div class="tool-group">
         <label>1. 陸地(海透明):</label>
         <input type="file" id="upload-land" accept="image/*">
@@ -104,15 +103,13 @@
         <input type="file" id="upload-elev" accept="image/*">
     </div>
 
-    <!-- ツール選択 -->
     <div class="tool-group">
         <button id="tool-pen" class="active" onclick="setTool('pen')">ペン</button>
         <button id="tool-eraser" onclick="setTool('eraser')">消しゴム</button>
         <button id="tool-fill" onclick="setTool('fill')">塗りつぶし</button>
-        <button id="tool-clip" onclick="toggleClip()">クリップ: OFF</button>
+        <button id="tool-clip" class="active" onclick="toggleClip()">クリップ: ON</button>
     </div>
 
-    <!-- パラメータ -->
     <div class="tool-group">
         <label>色:</label>
         <input type="color" id="color-picker" value="#ff0000">
@@ -125,10 +122,8 @@
 
 <div class="workspace">
     <div class="canvas-container">
-        <!-- 背景画像レイヤー -->
         <img id="land-img" style="display:none;">
         <img id="elev-img" style="display:none;">
-        <!-- 描画用メインキャンバス -->
         <canvas id="editor-canvas" width="4000" height="2000"></canvas>
     </div>
 </div>
@@ -142,20 +137,16 @@
     const ctx = canvas.getContext('2d');
     const statusText = document.getElementById('status-text');
 
-    // 初期設定：アンチエイリアスを無効化
     ctx.imageSmoothingEnabled = false;
 
-    let currentTool = 'pen'; // pen, eraser, fill
+    let currentTool = 'pen';
     let isDrawing = false;
-    let isClipping = false; // クリップ機能フラグ（陸地画像がある場合のみ有効化可能）
+    let isClipping = true; // デフォルトでクリップON
     
-    // 陸地判定用の隠しキャンバス（クリップ機能用）
-    const landCanvas = document.createElement('canvas');
-    landCanvas.width = 4000;
-    landCanvas.height = 2000;
-    const landCtx = landCanvas.getContext('2d');
+    // クリップ判定用の陸地データ保持変数
+    let landImageData = null;
 
-    // 画像アップロード処理 (陸地)
+    // 陸地画像アップロード
     document.getElementById('upload-land').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
@@ -165,15 +156,19 @@
             img.src = event.target.result;
             img.style.display = 'block';
             img.onload = function() {
-                // クリップ判定用に隠しキャンバスにも描画
-                landCtx.clearRect(0, 0, 4000, 2000);
-                landCtx.drawImage(img, 0, 0, 4000, 2000);
+                // クリップ（透明度判定）用にデータをメモリ上にロード
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = 4000;
+                tempCanvas.height = 2000;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.drawImage(img, 0, 0, 4000, 2000);
+                landImageData = tempCtx.getImageData(0, 0, 4000, 2000).data;
             }
         }
         reader.readAsDataURL(file);
     });
 
-    // 画像アップロード処理 (標高)
+    // 標高画像アップロード
     document.getElementById('upload-elev').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
@@ -186,7 +181,6 @@
         reader.readAsDataURL(file);
     });
 
-    // ツール切り替え
     function setTool(tool) {
         currentTool = tool;
         document.getElementById('tool-pen').classList.remove('active');
@@ -196,7 +190,6 @@
         updateStatus();
     }
 
-    // クリップ機能のトグル
     function toggleClip() {
         isClipping = !isClipping;
         const btn = document.getElementById('tool-clip');
@@ -209,7 +202,6 @@
         }
     }
 
-    // マウスイベント登録
     canvas.addEventListener('mousedown', startDrawing);
     canvas.addEventListener('mousemove', draw);
     canvas.addEventListener('mouseup', stopDrawing);
@@ -220,7 +212,6 @@
 
     function getMousePos(e) {
         const rect = canvas.getBoundingClientRect();
-        // 表示サイズ(4000x2000)に対する実際のマウス位置を計算
         const x = Math.floor((e.clientX - rect.left) * (canvas.width / rect.width));
         const y = Math.floor((e.clientY - rect.top) * (canvas.height / rect.height));
         return { x, y };
@@ -228,8 +219,7 @@
 
     function startDrawing(e) {
         const pos = getMousePos(e);
-        // 右端1pxは保護領域のため描画開始できない
-        if (pos.x >= 3999) return;
+        if (pos.x >= 3999) return; // 右端1pxは操作不可
 
         isDrawing = true;
         lastX = pos.x;
@@ -250,7 +240,6 @@
 
         if (!isDrawing || currentTool === 'fill') return;
         
-        // 直線をブレザナムアルゴリズム等で補間しつつ描画（アンチエイリアス無効のペン・消しゴム用）
         drawLine(lastX, lastY, pos.x, pos.y);
         
         lastX = pos.x;
@@ -260,38 +249,53 @@
     function stopDrawing() {
         if(isDrawing) {
             isDrawing = false;
-            syncRightEdge(); // 描画終了時に最終同期
-        }
-    }
-
-    // ピクセル描画の基盤（アンチエイリアス完全無効・クリップ対応）
-    function drawPixel(x, y) {
-        // 右端1pxには直接書き込めない
-        if (x >= 3999 || x < 0 || y < 0 || y >= 2000) return;
-
-        // クリップ機能が有効な場合、陸地キャンバスのアルファ値（透明度）をチェック
-        if (isClipping) {
-            const landAlpha = landCtx.getImageData(x, y, 1, 1).data[3];
-            if (landAlpha === 0) return; // 海（透明）なら描画スキップ
-        }
-
-        const size = parseInt(document.getElementById('brush-size').value);
-        const color = document.getElementById('color-picker').value;
-
-        if (currentTool === 'eraser') {
-            ctx.clearRect(x - Math.floor(size/2), y - Math.floor(size/2), size, size);
-        } else {
-            ctx.fillStyle = color;
-            ctx.fillRect(x - Math.floor(size/2), y - Math.floor(size/2), size, size);
-        }
-        
-        // 描画範囲が左端1pxにかすっている場合、即座に右端へ同期させる
-        if (x - Math.floor(size/2) <= 0) {
             syncRightEdge();
         }
     }
 
-    // ドットが飛ばないように線を繋ぐ処理
+    // 単一ピクセルの描画チェック（クリップ機能の核）
+    function checkPixelClippable(x, y) {
+        if (isClipping && landImageData) {
+            const idx = (y * 4000 + x) * 4;
+            const alpha = landImageData[idx + 3];
+            if (alpha === 0) return true; // 透明部分なので描画をスキップ（クリップする）
+        }
+        return false;
+    }
+
+    function drawPixel(x, y) {
+        if (x >= 3999 || x < 0 || y < 0 || y >= 2000) return;
+
+        const size = parseInt(document.getElementById('brush-size').value);
+        const color = document.getElementById('color-picker').value;
+
+        // ブラシサイズに合わせて矩形を描画する際も、1ピクセルずつクリップ判定を行う
+        const half = Math.floor(size / 2);
+        const startX = x - half;
+        const startY = y - half;
+
+        for (let dy = 0; dy < size; dy++) {
+            for (let dx = 0; dx < size; dx++) {
+                const px = startX + dx;
+                const py = startY + dy;
+
+                if (px >= 3999 || px < 0 || py < 0 || py >= 2000) continue;
+                if (checkPixelClippable(px, py)) continue; // ★透明なら乗せない
+
+                if (currentTool === 'eraser') {
+                    ctx.clearRect(px, py, 1, 1);
+                } else {
+                    ctx.fillStyle = color;
+                    ctx.fillRect(px, py, 1, 1);
+                }
+            }
+        }
+        
+        if (startX <= 0) {
+            syncRightEdge();
+        }
+    }
+
     function drawLine(x0, y0, x1, y1) {
         const dx = Math.abs(x1 - x0);
         const dy = Math.abs(y1 - y0);
@@ -308,16 +312,16 @@
         }
     }
 
-    // 🌟超重要：左端の1pxを右端の1px(x=3999)にコピーする同期機能
+    // 右端1pxに左端1pxを完全同期
     function syncRightEdge() {
-        // 左端(x=0)の縦1列(幅1px、高さ2000px)を取得
         const leftEdgeData = ctx.getImageData(0, 0, 1, 2000);
-        // 右端(x=3999)の縦1列に上書きコピー
         ctx.putImageData(leftEdgeData, 3999, 0);
     }
 
-    // 塗りつぶし (Flood Fill) 機能
+    // 塗りつぶし (Flood Fill)
     function floodFill(startX, startY) {
+        if (checkPixelClippable(startX, startY)) return; // クリックした場所がすでにクリップ対象なら何もしない
+
         const colorHex = document.getElementById('color-picker').value;
         const targetR = parseInt(colorHex.substring(1,3), 16);
         const targetG = parseInt(colorHex.substring(3,5), 16);
@@ -327,45 +331,34 @@
         const imgData = ctx.getImageData(0, 0, 4000, 2000);
         const data = imgData.data;
 
-        // クリックした場所の元の色を取得
         const startPos = (startY * 4000 + startX) * 4;
         const startR = data[startPos];
         const startG = data[startPos+1];
         const startB = data[startPos+2];
         const startA = data[startPos+3];
 
-        // すでに同じ色なら処理しない
         if (startR === targetR && startG === targetG && startB === targetB && startA === targetA) return;
-
-        // 陸地判定用のデータ
-        let landData = null;
-        if (isClipping) {
-            landData = landCtx.getImageData(0, 0, 4000, 2000).data;
-        }
 
         const queue = [[startX, startY]];
 
         while (queue.length > 0) {
             const [x, y] = queue.pop();
-            if (x < 0 || x >= 3999 || y < 0 || y >= 2000) dangerouslyContinue; // 右端3999は保護するため侵入させない
+            if (x < 0 || x >= 3999 || y < 0 || y >= 2000) continue; 
 
             const idx = (y * 4000 + x) * 4;
 
-            // 色が一致しているか確認
             if (data[idx] === startR && data[idx+1] === startG && data[idx+2] === startB && data[idx+3] === startA) {
                 
-                // クリップ機能チェック（海なら塗らない）
-                if (isClipping && landData && landData[idx+3] === 0) {
+                // クリップ判定：陸地画像で透明(アルファが0)の場所なら塗りつぶしをスキップ
+                if (isClipping && landImageData && landImageData[idx+3] === 0) {
                     continue; 
                 }
 
-                // 色を塗り替える
                 data[idx] = targetR;
                 data[idx+1] = targetG;
                 data[idx+2] = targetB;
                 data[idx+3] = targetA;
 
-                // 4方向走査
                 queue.push([x + 1, y]);
                 queue.push([x - 1, y]);
                 queue.push([x, y + 1]);
@@ -375,12 +368,10 @@
         ctx.putImageData(imgData, 0, 0);
     }
 
-    // ステータスバー表示更新
     function updateStatus() {
         statusText.textContent = `座標: (0, 0) | ツール: ${currentTool === 'pen' ? 'ペン' : currentTool === 'eraser' ? '消しゴム' : '塗りつぶし'}`;
     }
 
-    // ダウンロード機能（描画した気候レイヤーのみを透過PNGで出力）
     function downloadMap() {
         const link = document.createElement('a');
         link.download = 'climate_map.png';
