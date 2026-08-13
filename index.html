@@ -35,14 +35,14 @@
     }
 
     /*
-     * Leafletのズームボタンなどは全部消す
+     * Leafletのコントロールを全部消す
      */
     .leaflet-control-container {
         display: none;
     }
 
     /*
-     * 地図タイルの隙間をなくす
+     * タイルのサイズを256×256pxに固定
      */
     .leaflet-tile {
         width: 256px !important;
@@ -100,7 +100,7 @@
         top: 18px;
         right: 20px;
 
-        min-width: 190px;
+        min-width: 210px;
 
         padding: 11px 15px;
 
@@ -142,7 +142,13 @@
 
 <div id="map"></div>
 
+
+<!-- =========================================================
+     タイトル
+========================================================= -->
+
 <div class="title">
+
     <div class="title-main">
         Charadise
     </div>
@@ -150,26 +156,43 @@
     <div class="title-sub">
         キャラたちの楽園 — 永遠の土地
     </div>
+
 </div>
 
-<!-- 座標表示 -->
+
+<!-- =========================================================
+     座標表示
+========================================================= -->
+
 <div class="coordinates">
+
     <div class="coordinate-title">
         WORLD COORDINATES
     </div>
 
     <div class="coordinate-value">
-        X: <span id="coordinate-x">0</span>
+        X:
+        <span id="coordinate-x">—</span>
     </div>
 
     <div class="coordinate-value">
-        Y: <span id="coordinate-y">0</span>
+        Y:
+        <span id="coordinate-y">—</span>
     </div>
 
     <div class="coordinate-value">
-        Tile: <span id="tile-x">0</span>, <span id="tile-y">0</span>
+        Tile:
+        <span id="tile-x">—</span>,
+        <span id="tile-y">—</span>
     </div>
+
+    <div class="coordinate-value">
+        Folder:
+        <span id="folder-name">—</span>
+    </div>
+
 </div>
+
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -180,50 +203,102 @@
     Charadise Infinite Tile World
 ============================================================
 
-    1タイル = 256 × 256 px
+    1タイル
+    = 256 × 256 px
+
+
+    ========================================================
+    フォルダ構造
+    ========================================================
+
+    16 × 16タイル
+    = 256ファイル
+
+    1つのフォルダに256ファイルを収納する。
+
 
     例：
 
-         -1, -1      0, -1      1, -1
-
-         -1,  0      0,  0      1,  0
-
-         -1,  1      0,  1      1,  1
-
-
-    ファイル：
-
     tiles/
-    ├── -1_-1.png
-    ├── 0_-1.png
-    ├── 1_-1.png
-    ├── -1_0.png
-    ├── 0_0.png
-    ├── 1_0.png
-    ├── -1_1.png
-    ├── 0_1.png
-    └── 1_1.png
+    ├── 0_0/
+    │   ├── 0_0.png
+    │   ├── 1_0.png
+    │   ├── ...
+    │   └── 15_15.png
+    │
+    ├── 1_0/
+    │   ├── 0_0.png
+    │   ├── 1_0.png
+    │   └── ...
+    │
+    ├── 0_1/
+    │   └── ...
+    │
+    └── -1_0/
+        └── ...
 
 
-    X / Y 座標は無限に続く。
+    フォルダ座標
+
+    X方向：
+        0～15     → フォルダ0
+        16～31    → フォルダ1
+        -1～-16   → フォルダ-1
+
+
+    Y方向も同じ。
+
+
+    例えば、
+
+        X = 17
+        Y = 3
+
+    の場合、
+
+        フォルダ：
+        tiles/1_0/
+
+        ファイル：
+        1_3.png
+
+
+    となる。
+
+
+    世界の大きさに上限はない。
 */
 
 
 /*
 ============================================================
-    Leaflet本体
+    基本設定
+============================================================
+*/
+
+const TILE_SIZE = 256;
+
+/*
+ * 1フォルダに16×16 = 256ファイル
+ */
+const CHUNK_SIZE = 16;
+
+
+/*
+============================================================
+    Leaflet
 ============================================================
 */
 
 const map = L.map("map", {
 
     /*
-     * 通常の地球地図ではなく単純なXY平面
+     * 地球ではなくXY平面
      */
     crs: L.CRS.Simple,
 
     /*
-     * ズームは0だけ
+     * ズーム固定
      */
     zoom: 0,
 
@@ -232,6 +307,8 @@ const map = L.map("map", {
 
     /*
      * 初期位置
+     *
+     * 0_0タイルの中央
      */
     center: [128, 128],
 
@@ -251,96 +328,156 @@ const map = L.map("map", {
 
 /*
 ============================================================
+    座標処理
+============================================================
+
+    JavaScriptの % は負数で扱うと
+    マイナスになるため、
+
+    floor division
+
+    を使って正しく処理する。
+*/
+
+
+/*
+ * XまたはYのタイル番号から
+ * チャンク番号を取得
+ */
+function getChunkCoordinate(tileCoordinate) {
+
+    return Math.floor(
+        tileCoordinate / CHUNK_SIZE
+    );
+
+}
+
+
+/*
+ * タイル番号から
+ * フォルダ内でのローカル番号を取得
+ */
+function getLocalCoordinate(tileCoordinate) {
+
+    return (
+        ((tileCoordinate % CHUNK_SIZE) + CHUNK_SIZE)
+        % CHUNK_SIZE
+    );
+
+}
+
+
+/*
+============================================================
     無限タイルレイヤー
 ============================================================
 */
 
-const InfiniteWorldLayer = L.GridLayer.extend({
-
-    tileSize: 256,
-
-    /*
-     * 東西方向に勝手に世界を繰り返さない
-     */
-    noWrap: true,
-
-    bounds: undefined,
-
-    createTile: function(coords, done) {
+const InfiniteWorldLayer =
+    L.GridLayer.extend({
 
         /*
-         * Leafletのタイル座標
-         *
-         * coords.x = X
-         * coords.y = Y
+         * 1タイル256px
          */
-
-        const x = coords.x;
-        const y = coords.y;
-
-        const tile = document.createElement("img");
-
-        tile.width = 256;
-        tile.height = 256;
-
-        tile.alt = "";
+        tileSize: TILE_SIZE,
 
         /*
-         * タイルファイル
-         *
-         * 例：
-         *
-         * X = -2
-         * Y = 5
-         *
-         * → tiles/-2_5.png
+         * 世界を横方向に繰り返さない
          */
+        noWrap: true,
 
-        tile.src =
-            "./tiles/" +
-            x +
-            "_" +
-            y +
-            ".png";
+        /*
+         * 範囲を指定しない
+         */
+        bounds: undefined,
 
 
         /*
-         * 読み込み成功
+         * タイル生成
          */
+        createTile: function(coords, done) {
 
-        tile.onload = function() {
+            /*
+             * Leafletのタイル座標
+             *
+             * coords.x
+             * coords.y
+             */
 
-            done(null, tile);
+            const x = coords.x;
+            const y = coords.y;
 
-        };
+
+            /*
+             * このタイルが入るフォルダ
+             */
+
+            const chunkX =
+                getChunkCoordinate(x);
+
+            const chunkY =
+                getChunkCoordinate(y);
 
 
-        /*
-         * ファイルが存在しない場合
-         */
+            /*
+             * フォルダ内でのファイル番号
+             */
 
-        tile.onerror = function() {
+            const localX =
+                getLocalCoordinate(x);
 
-            const canvas =
-                document.createElement("canvas");
+            const localY =
+                getLocalCoordinate(y);
 
-            canvas.width = 256;
-            canvas.height = 256;
 
-            const context =
-                canvas.getContext("2d");
+            /*
+             * 画像要素
+             */
 
-            context.fillStyle = "#dff4ff";
+            const tile =
+                document.createElement("img");
 
-            context.fillRect(
-                0,
-                0,
-                256,
-                256
-            );
+
+            tile.width = TILE_SIZE;
+            tile.height = TILE_SIZE;
+
+            tile.alt = "";
+
+
+            /*
+             * ==================================================
+             * ファイルパス
+             * ==================================================
+             *
+             * 例：
+             *
+             * x = 17
+             * y = 3
+             *
+             * → tiles/1_0/1_3.png
+             *
+             *
+             * x = -1
+             * y = 0
+             *
+             * → tiles/-1_0/15_0.png
+             */
 
             tile.src =
-                canvas.toDataURL("image/png");
+                "./tiles/" +
+                chunkX +
+                "_" +
+                chunkY +
+                "/" +
+                localX +
+                "_" +
+                localY +
+                ".png";
+
+
+            /*
+             * 読み込み成功
+             */
 
             tile.onload = function() {
 
@@ -348,11 +485,63 @@ const InfiniteWorldLayer = L.GridLayer.extend({
 
             };
 
-        };
 
-        return tile;
-    }
-});
+            /*
+             * ファイルが存在しない場合
+             *
+             * 空の水色タイルとして扱う。
+             */
+
+            tile.onerror = function() {
+
+                const canvas =
+                    document.createElement("canvas");
+
+                canvas.width =
+                    TILE_SIZE;
+
+                canvas.height =
+                    TILE_SIZE;
+
+
+                const context =
+                    canvas.getContext("2d");
+
+
+                context.fillStyle =
+                    "#dff4ff";
+
+
+                context.fillRect(
+                    0,
+                    0,
+                    TILE_SIZE,
+                    TILE_SIZE
+                );
+
+
+                /*
+                 * 空タイルを画像として表示
+                 */
+
+                tile.src =
+                    canvas.toDataURL("image/png");
+
+
+                tile.onload = function() {
+
+                    done(null, tile);
+
+                };
+
+            };
+
+
+            return tile;
+
+        }
+
+    });
 
 
 /*
@@ -369,44 +558,68 @@ world.addTo(map);
 
 /*
 ============================================================
-    座標表示
+    座標表示要素
 ============================================================
 */
 
 const coordinateX =
-    document.getElementById("coordinate-x");
+    document.getElementById(
+        "coordinate-x"
+    );
+
 
 const coordinateY =
-    document.getElementById("coordinate-y");
+    document.getElementById(
+        "coordinate-y"
+    );
+
 
 const tileX =
-    document.getElementById("tile-x");
+    document.getElementById(
+        "tile-x"
+    );
+
 
 const tileY =
-    document.getElementById("tile-y");
+    document.getElementById(
+        "tile-y"
+    );
+
+
+const folderName =
+    document.getElementById(
+        "folder-name"
+    );
 
 
 /*
- * マウス位置から世界座標を計算
- *
- * LeafletのCRS.Simpleでは
- *
- * lat = Y
- * lng = X
- *
- * として扱われる。
- *
- * 1タイル = 256座標単位。
- */
+============================================================
+    マウス座標
+============================================================
+*/
 
 map.on("mousemove", function(event) {
 
-    const x = event.latlng.lng;
-    const y = event.latlng.lat;
+    /*
+     * CRS.Simpleでは
+     *
+     * lng = X
+     * lat = Y
+     */
+
+    const x =
+        event.latlng.lng;
+
+    const y =
+        event.latlng.lat;
+
 
     /*
+     * 世界座標
+     *
      * 小数第2位まで表示
      */
+
     coordinateX.textContent =
         x.toFixed(2);
 
@@ -415,17 +628,20 @@ map.on("mousemove", function(event) {
 
 
     /*
-     * 現在いるタイル番号
-     *
-     * floor()を使うことで
-     * マイナス座標でも正しく判定する。
+     * 現在いるタイル
      */
 
     const currentTileX =
-        Math.floor(x / 256);
+        Math.floor(
+            x / TILE_SIZE
+        );
+
 
     const currentTileY =
-        Math.floor(y / 256);
+        Math.floor(
+            y / TILE_SIZE
+        );
+
 
     tileX.textContent =
         currentTileX;
@@ -433,22 +649,48 @@ map.on("mousemove", function(event) {
     tileY.textContent =
         currentTileY;
 
+
+    /*
+     * 現在いるフォルダ
+     */
+
+    const currentChunkX =
+        getChunkCoordinate(
+            currentTileX
+        );
+
+
+    const currentChunkY =
+        getChunkCoordinate(
+            currentTileY
+        );
+
+
+    folderName.textContent =
+        currentChunkX +
+        "_" +
+        currentChunkY;
+
 });
 
 
 /*
 ============================================================
-    マウスが地図から外れた場合
+    マウスが地図から出た場合
 ============================================================
 */
 
 map.on("mouseout", function() {
 
     coordinateX.textContent = "—";
+
     coordinateY.textContent = "—";
 
     tileX.textContent = "—";
+
     tileY.textContent = "—";
+
+    folderName.textContent = "—";
 
 });
 
@@ -508,12 +750,13 @@ map.on("zoomend", function() {
 
 /*
 ============================================================
-    ホイール操作
+    ホイール操作禁止
 ============================================================
 */
 
 const mapElement =
     document.getElementById("map");
+
 
 mapElement.addEventListener(
     "wheel",
@@ -530,7 +773,7 @@ mapElement.addEventListener(
 
 /*
 ============================================================
-    右クリックメニューを無効化
+    右クリックメニュー禁止
 ============================================================
 */
 
@@ -546,716 +789,16 @@ mapElement.addEventListener(
 
 /*
 ============================================================
-    ピンは使用しない
+    ピンなどは使用しない
 ============================================================
-
-    座標は画面右上の表示だけで確認する。
 
     L.marker()
     L.circleMarker()
     L.popup()
 
     などは使用していない。
-*/
-
-</script>
-
-</body>
-</html>    /*
-     * Leafletのコントロールを全部消す
-     */
-    .leaflet-control-container {
-        display: none;
-    }
-
-    /*
-     * タイルサイズ
-     *
-     * 1タイル = 2048 × 2048 px
-     */
-    .leaflet-tile {
-        width: 2048px !important;
-        height: 2048px !important;
-    }
-
-    /*
-     * タイトル
-     */
-    .title {
-        position: fixed;
-        z-index: 9999;
-
-        top: 18px;
-        left: 20px;
-
-        padding: 12px 18px;
-
-        border-radius: 16px;
-
-        background: rgba(255, 255, 255, 0.88);
-
-        box-shadow:
-            0 5px 20px rgba(0, 0, 0, 0.12);
-
-        font-family:
-            system-ui,
-            -apple-system,
-            BlinkMacSystemFont,
-            "Noto Sans JP",
-            sans-serif;
-
-        pointer-events: none;
-        user-select: none;
-    }
-
-    .title-main {
-        font-size: 21px;
-        font-weight: 700;
-    }
-
-    .title-sub {
-        margin-top: 3px;
-        font-size: 12px;
-        opacity: 0.65;
-    }
-
-    /*
-     * 座標表示
-     */
-    .coordinates {
-        position: fixed;
-        z-index: 9999;
-
-        top: 18px;
-        right: 20px;
-
-        min-width: 205px;
-
-        padding: 11px 15px;
-
-        border-radius: 14px;
-
-        background: rgba(255, 255, 255, 0.88);
-
-        box-shadow:
-            0 5px 20px rgba(0, 0, 0, 0.12);
-
-        font-family:
-            system-ui,
-            -apple-system,
-            BlinkMacSystemFont,
-            "Noto Sans JP",
-            sans-serif;
-
-        font-size: 13px;
-
-        pointer-events: none;
-        user-select: none;
-    }
-
-    .coordinate-title {
-        font-size: 11px;
-        opacity: 0.6;
-        margin-bottom: 4px;
-    }
-
-    .coordinate-value {
-        font-variant-numeric: tabular-nums;
-        line-height: 1.5;
-    }
-</style>
-
-</head>
-
-<body>
-
-<div id="map"></div>
-
-
-<!--
-============================================================
-    タイトル
-============================================================
--->
-
-<div class="title">
-
-    <div class="title-main">
-        Charadise
-    </div>
-
-    <div class="title-sub">
-        キャラたちの楽園 — 永遠の土地
-    </div>
-
-</div>
-
-
-<!--
-============================================================
-    座標表示
-============================================================
--->
-
-<div class="coordinates">
-
-    <div class="coordinate-title">
-        WORLD COORDINATES
-    </div>
-
-    <div class="coordinate-value">
-        X:
-        <span id="coordinate-x">0</span>
-    </div>
-
-    <div class="coordinate-value">
-        Y:
-        <span id="coordinate-y">0</span>
-    </div>
-
-    <div class="coordinate-value">
-        Tile:
-        <span id="tile-x">0</span>,
-        <span id="tile-y">0</span>
-    </div>
-
-</div>
-
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-<script>
-
-/*
-============================================================
-    Charadise Infinite Tile World
-============================================================
-
-    1タイル = 2048 × 2048 px
-
-    タイル座標：
-
-         -1, -1        0, -1        1, -1
-
-         -1,  0        0,  0        1,  0
-
-         -1,  1        0,  1        1,  1
-
-
-    ファイル：
-
-    tiles/
-    ├── -1_-1.png
-    ├── 0_-1.png
-    ├── 1_-1.png
-    ├── -1_0.png
-    ├── 0_0.png
-    ├── 1_0.png
-    ├── -1_1.png
-    ├── 0_1.png
-    └── 1_1.png
-
-
-============================================================
-    座標仕様
-============================================================
-
-    1タイル = 2048座標単位
-
-    0_0.png：
-
-        X = 0 ～ 2047
-        Y = 0 ～ 2047
-
-    1_0.png：
-
-        X = 2048 ～ 4095
-        Y = 0 ～ 2047
-
-    -1_0.png：
-
-        X = -2048 ～ -1
-        Y = 0 ～ 2047
-
-    0_1.png：
-
-        X = 0 ～ 2047
-        Y = 2048 ～ 4095
-
-    0_-1.png：
-
-        X = 0 ～ 2047
-        Y = -2048 ～ -1
-
-============================================================
-*/
-
-
-/*
-============================================================
-    定数
-============================================================
-*/
-
-/*
- * 1タイルのサイズ
- */
-const TILE_SIZE = 2048;
-
-
-/*
-============================================================
-    Leaflet本体
-============================================================
-*/
-
-const map = L.map("map", {
-
-    /*
-     * 通常の地球地図ではなく
-     * XY平面として扱う。
-     */
-    crs: L.CRS.Simple,
-
-    /*
-     * ズームは0だけ。
-     */
-    zoom: 0,
-
-    minZoom: 0,
-    maxZoom: 0,
-
-    /*
-     * 最初に表示する位置。
-
-     * 0_0.pngの中央付近。
-     *
-     * [Y, X]
-     */
-    center: [
-        TILE_SIZE / 2,
-        TILE_SIZE / 2
-    ],
-
-    /*
-     * ズームUIなし
-     */
-    zoomControl: false,
-
-    /*
-     * ズーム操作をすべて禁止
-     */
-    scrollWheelZoom: false,
-    doubleClickZoom: false,
-    touchZoom: false,
-    boxZoom: false,
-    keyboard: false,
-
-    /*
-     * 世界の範囲を指定しない。
-     */
-    maxBounds: undefined,
-
-    /*
-     * 範囲外への抵抗なし
-     */
-    maxBoundsViscosity: 0
-
-});
-
-
-/*
-============================================================
-    無限タイルレイヤー
-============================================================
-*/
-
-const InfiniteWorldLayer = L.GridLayer.extend({
-
-    /*
-     * 1タイル = 2048 × 2048
-     */
-    tileSize: TILE_SIZE,
-
-    /*
-     * 世界を横方向に繰り返さない。
-     */
-    noWrap: true,
-
-    /*
-     * 最大範囲なし。
-     */
-    bounds: undefined,
-
-
-    /*
-     * タイル生成
-     */
-    createTile: function(coords, done) {
-
-        /*
-         * タイル座標
-         *
-         * coords.x
-         * coords.y
-         */
-
-        const x = coords.x;
-        const y = coords.y;
-
-
-        /*
-         * 画像要素
-         */
-        const tile =
-            document.createElement("img");
-
-
-        /*
-         * タイルサイズ
-         */
-        tile.width = TILE_SIZE;
-        tile.height = TILE_SIZE;
-
-
-        /*
-         * alt属性
-         */
-        tile.alt = "";
-
-
-        /*
-         * 画像ファイル
-
-         * 例：
-         *
-         * x = 0
-         * y = 0
-         *
-         * → tiles/0_0.png
-         *
-         *
-         * x = -2
-         * y = 3
-         *
-         * → tiles/-2_3.png
-         */
-
-        tile.src =
-            "./tiles/" +
-            x +
-            "_" +
-            y +
-            ".png";
-
-
-        /*
-         * 読み込み成功
-         */
-        tile.onload = function() {
-
-            done(null, tile);
-
-        };
-
-
-        /*
-         * ファイルが存在しない場合
-         *
-         * エラー表示を出さず、
-         * 空のタイルとして扱う。
-         */
-        tile.onerror = function() {
-
-            /*
-             * 空の2048 × 2048キャンバス
-             */
-            const canvas =
-                document.createElement("canvas");
-
-            canvas.width = TILE_SIZE;
-            canvas.height = TILE_SIZE;
-
-
-            /*
-             * 背景色
-             */
-            const context =
-                canvas.getContext("2d");
-
-            context.fillStyle =
-                "#dff4ff";
-
-            context.fillRect(
-                0,
-                0,
-                TILE_SIZE,
-                TILE_SIZE
-            );
-
-
-            /*
-             * キャンバスを画像として表示
-             */
-            tile.src =
-                canvas.toDataURL(
-                    "image/png"
-                );
-
-
-            tile.onload = function() {
-
-                done(null, tile);
-
-            };
-
-        };
-
-
-        return tile;
-
-    }
-
-});
-
-
-/*
-============================================================
-    無限世界を追加
-============================================================
-*/
-
-const world =
-    new InfiniteWorldLayer();
-
-world.addTo(map);
-
-
-/*
-============================================================
-    座標表示要素
-============================================================
-*/
-
-const coordinateX =
-    document.getElementById(
-        "coordinate-x"
-    );
-
-const coordinateY =
-    document.getElementById(
-        "coordinate-y"
-    );
-
-const tileX =
-    document.getElementById(
-        "tile-x"
-    );
-
-const tileY =
-    document.getElementById(
-        "tile-y"
-    );
-
-
-/*
-============================================================
-    マウス座標
-============================================================
-*/
-
-map.on("mousemove", function(event) {
-
-    /*
-     * CRS.Simpleでは
-     *
-     * lat = Y
-     * lng = X
-     */
-
-    const x =
-        event.latlng.lng;
-
-    const y =
-        event.latlng.lat;
-
-
-    /*
-     * 世界座標を表示
-     *
-     * 小数第2位まで。
-     */
-
-    coordinateX.textContent =
-        x.toFixed(2);
-
-    coordinateY.textContent =
-        y.toFixed(2);
-
-
-    /*
-     * 現在いるタイルを計算
-     *
-     * 2048 × 2048単位。
-     *
-     * floor()を使用するため、
-     * マイナス座標でも正しく処理される。
-     */
-
-    const currentTileX =
-        Math.floor(
-            x / TILE_SIZE
-        );
-
-    const currentTileY =
-        Math.floor(
-            y / TILE_SIZE
-        );
-
-
-    /*
-     * タイル番号を表示
-     */
-
-    tileX.textContent =
-        currentTileX;
-
-    tileY.textContent =
-        currentTileY;
-
-});
-
-
-/*
-============================================================
-    マウスが地図から出た場合
-============================================================
-*/
-
-map.on("mouseout", function() {
-
-    coordinateX.textContent = "—";
-    coordinateY.textContent = "—";
-
-    tileX.textContent = "—";
-    tileY.textContent = "—";
-
-});
-
-
-/*
-============================================================
-    初期位置
-============================================================
-*/
-
-map.setView(
-
-    [
-        TILE_SIZE / 2,
-        TILE_SIZE / 2
-    ],
-
-    0,
-
-    {
-        animate: false
-    }
-
-);
-
-
-/*
-============================================================
-    ズーム完全禁止
-============================================================
-*/
-
-map.on("zoomstart", function() {
-
-    if (map.getZoom() !== 0) {
-
-        map.setZoom(
-            0,
-            {
-                animate: false
-            }
-        );
-
-    }
-
-});
-
-
-map.on("zoomend", function() {
-
-    if (map.getZoom() !== 0) {
-
-        map.setZoom(
-            0,
-            {
-                animate: false
-            }
-        );
-
-    }
-
-});
-
-
-/*
-============================================================
-    ホイール操作
-============================================================
-*/
-
-const mapElement =
-    document.getElementById("map");
-
-
-mapElement.addEventListener(
-    "wheel",
-    function(event) {
-
-        event.preventDefault();
-
-    },
-    {
-        passive: false
-    }
-);
-
-
-/*
-============================================================
-    右クリックメニュー無効化
-============================================================
-*/
-
-mapElement.addEventListener(
-    "contextmenu",
-    function(event) {
-
-        event.preventDefault();
-
-    }
-);
-
-
-/*
-============================================================
-    ピンは使用しない
-============================================================
-
-    L.marker()
-    L.circleMarker()
-    L.popup()
-
-    などは使用しない。
 
     世界そのものをタイル画像で構成する。
-
-============================================================
 */
 
 </script>
