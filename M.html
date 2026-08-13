@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>4000x2000 気候地図エディタ Pro (ペイントロック版)</title>
+    <title>4000x2000 気候地図エディタ Pro (タッチ＆マウス対応)</title>
     <style>
         body {
             font-family: sans-serif;
@@ -14,6 +14,8 @@
             flex-direction: column;
             height: 100vh;
             user-select: none;
+            -webkit-user-select: none;
+            touch-action: none; /* ブラウザ全体のデフォルトのスクロールやピンチズームを無効化 */
         }
         header {
             background: #34495e;
@@ -82,14 +84,16 @@
         }
         /* モード別の挙動とスタイルの設定 */
         .workspace.mode-move {
-            overflow: auto; /* 移動モードのときだけスクロール可能にする */
+            overflow: auto; /* 移動モードのときだけスクロール可能 */
             cursor: grab;
+            touch-action: auto; /* 移動モードの時は指でのスクロールを許可 */
         }
         .workspace.mode-move:active {
             cursor: grabbing;
         }
         .workspace.mode-paint {
-            overflow: hidden; /* ペイントモードのときはスクロールバー自体をロックして動かさない */
+            overflow: hidden; /* ペイントモードは画面を強制ロック */
+            touch-action: none; /* 指で引っ張っても画面が動かないようにする */
         }
         .workspace.mode-paint #editor-canvas {
             cursor: crosshair;
@@ -161,20 +165,15 @@
 
     <!-- 気候用12色パレット + カスタム -->
     <div class="palette">
-        <!-- 熱帯系 -->
         <div class="color-dot selected" style="background:#0000ff;" title="熱帯雨林" onclick="selectPalette(this, '#0000ff')"></div>
         <div class="color-dot" style="background:#40e0d0;" title="サバナ" onclick="selectPalette(this, '#40e0d0')"></div>
-        <!-- 乾燥帯系 -->
         <div class="color-dot" style="background:#ffcc00;" title="砂漠" onclick="selectPalette(this, '#ffcc00')"></div>
         <div class="color-dot" style="background:#ffea88;" title="ステップ" onclick="selectPalette(this, '#ffea88')"></div>
-        <!-- 温帯系 -->
         <div class="color-dot" style="background:#00ff00;" title="温暖湿潤" onclick="selectPalette(this, '#00ff00')"></div>
         <div class="color-dot" style="background:#32cd32;" title="西岸海洋性" onclick="selectPalette(this, '#32cd32')"></div>
         <div class="color-dot" style="background:#ffff00;" title="地中海性" onclick="selectPalette(this, '#ffff00')"></div>
-        <!-- 亜寒帯系 -->
         <div class="color-dot" style="background:#993399;" title="亜寒帯湿潤" onclick="selectPalette(this, '#993399')"></div>
         <div class="color-dot" style="background:#da70d6;" title="亜寒帯冬季少雨" onclick="selectPalette(this, '#da70d6')"></div>
-        <!-- 寒帯系・その他 -->
         <div class="color-dot" style="background:#b0c4de;" title="ツンドラ" onclick="selectPalette(this, '#b0c4de')"></div>
         <div class="color-dot" style="background:#ffffff;" title="氷雪" onclick="selectPalette(this, '#ffffff')"></div>
         <div class="color-dot" style="background:#8b4513;" title="高山" onclick="selectPalette(this, '#8b4513')"></div>
@@ -296,49 +295,77 @@
         reader.readAsDataURL(file);
     });
 
-    // --- 移動（スクロール）モードのロジック ---
+    // --- マウス・タッチ両対応の座標取得処理 ---
+    function getEventPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        let clientX, clientY;
+        
+        // タッチイベントかマウスイベントかを判定
+        if (e.touches && e.touches.length > 0) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+        }
+
+        const x = Math.floor((clientX - rect.left) * (canvas.width / rect.width));
+        const y = Math.floor((clientY - rect.top) * (canvas.height / rect.height));
+        return { x, y };
+    }
+
+    // --- 移動（スクロール）モードのロジック（マウス＆指ドラッグ両対応） ---
     let isMoving = false;
     let startStartX, startStartY;
     let scrollLeft, scrollTop;
 
-    workspace.addEventListener('mousedown', (e) => {
+    function moveStart(pageX, pageY) {
         if (appMode === 'move') {
             isMoving = true;
-            startStartX = e.pageX - workspace.offsetLeft;
-            startStartY = e.pageY - workspace.offsetTop;
+            startStartX = pageX - workspace.offsetLeft;
+            startStartY = pageY - workspace.offsetTop;
             scrollLeft = workspace.scrollLeft;
             scrollTop = workspace.scrollTop;
         }
-    });
+    }
 
-    workspace.addEventListener('mousemove', (e) => {
+    function moveProgress(pageX, pageY) {
         if (!isMoving || appMode !== 'move') return;
-        e.preventDefault();
-        const x = e.pageX - workspace.offsetLeft;
-        const y = e.pageY - workspace.offsetTop;
+        const x = pageX - workspace.offsetLeft;
+        const y = pageY - workspace.offsetTop;
         workspace.scrollLeft = scrollLeft - (x - startStartX);
         workspace.scrollTop = scrollTop - (y - startStartY);
-    });
+    }
 
-    const stopMoving = () => { isMoving = false; };
-    workspace.addEventListener('mouseup', stopMoving);
-    workspace.addEventListener('mouseleave', stopMoving);
+    const moveEnd = () => { isMoving = false; };
+
+    // 移動モード用イベントリスナー (マウス)
+    workspace.addEventListener('mousedown', (e) => { moveStart(e.pageX, e.pageY); });
+    workspace.addEventListener('mousemove', (e) => { moveProgress(e.pageX, e.pageY); });
+    workspace.addEventListener('mouseup', moveEnd);
+    workspace.addEventListener('mouseleave', moveEnd);
+
+    // 移動モード用イベントリスナー (タッチ)
+    workspace.addEventListener('touchstart', (e) => {
+        if (appMode === 'move' && e.touches.length === 1) {
+            moveStart(e.touches[0].pageX, e.touches[0].pageY);
+        }
+    }, { passive: true });
+    workspace.addEventListener('touchmove', (e) => {
+        if (appMode === 'move' && isMoving && e.touches.length === 1) {
+            moveProgress(e.touches[0].pageX, e.touches[0].pageY);
+        }
+    }, { passive: true });
+    workspace.addEventListener('touchend', moveEnd);
 
 
-    // --- ペイントモードのロジック ---
+    // --- ペイントモードのロジック（マウス＆指スライド両対応） ---
     let lastX = 0;
     let lastY = 0;
 
-    function getMousePos(e) {
-        const rect = canvas.getBoundingClientRect();
-        const x = Math.floor((e.clientX - rect.left) * (canvas.width / rect.width));
-        const y = Math.floor((e.clientY - rect.top) * (canvas.height / rect.height));
-        return { x, y };
-    }
-
-    canvas.addEventListener('mousedown', (e) => {
+    function paintStart(e) {
         if (appMode !== 'paint') return;
-        const pos = getMousePos(e);
+        const pos = getEventPos(e);
         if (pos.x >= 3999) return; 
 
         isDrawing = true;
@@ -352,31 +379,51 @@
         } else {
             drawPixel(pos.x, pos.y);
         }
-    });
+    }
 
-    // 押しっぱなしでスライド（ドラッグ）したときに連続で描画するイベント
-    canvas.addEventListener('mousemove', (e) => {
-        const pos = getMousePos(e);
+    function paintMove(e) {
+        const pos = getEventPos(e);
         
         let toolName = currentTool === 'pen' ? 'ペン' : currentTool === 'eraser' ? '消しゴム' : '塗りつぶし';
         statusText.textContent = `座標: (${pos.x}, ${pos.y}) | モード: ${appMode === 'paint' ? 'ペイント ('+toolName+')' : '移動'}`;
 
-        // isDrawingがtrue（マウス押下中）ならスライド描画を実行
         if (!isDrawing || appMode !== 'paint' || currentTool === 'fill') return;
         
-        drawLine(lastX, lastY, pos.x, pos.y); // ブレザナム補間で隙間なく塗る
+        drawLine(lastX, lastY, pos.x, pos.y); 
         lastX = pos.x;
         lastY = pos.y;
-    });
+    }
 
-    const stopDrawing = () => {
+    const paintEnd = () => {
         if (isDrawing) {
             isDrawing = false;
             syncRightEdge();
         }
     };
-    canvas.addEventListener('mouseup', stopDrawing);
-    canvas.addEventListener('mouseleave', stopDrawing);
+
+    // ペイント用マウスリスナー
+    canvas.addEventListener('mousedown', paintStart);
+    canvas.addEventListener('mousemove', paintMove);
+    canvas.addEventListener('mouseup', paintEnd);
+    canvas.addEventListener('mouseleave', paintEnd);
+
+    // ペイント用タッチリスナー (スライド操作)
+    canvas.addEventListener('touchstart', (e) => {
+        if (appMode === 'paint') {
+            e.preventDefault(); // ペイント中はブラウザの画面引っ張りスクロールを完全に殺す
+            paintStart(e);
+        }
+    }, { passive: false });
+    
+    canvas.addEventListener('touchmove', (e) => {
+        if (appMode === 'paint' && isDrawing) {
+            e.preventDefault(); // ペイント中の画面ブレを防止
+            paintMove(e);
+        }
+    }, { passive: false });
+    
+    canvas.addEventListener('touchend', paintEnd);
+    canvas.addEventListener('touchcancel', paintEnd);
 
     // クリップ判定
     function checkPixelClippable(x, y) {
