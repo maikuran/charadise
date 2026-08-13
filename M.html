@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>4000x2000 気候地図エディタ Pro</title>
+    <title>4000x2000 気候地図エディタ Pro (ペイントロック版)</title>
     <style>
         body {
             font-family: sans-serif;
@@ -23,6 +23,7 @@
             align-items: center;
             flex-wrap: wrap;
             border-bottom: 2px solid #1a252f;
+            z-index: 20;
         }
         .tool-group {
             display: flex;
@@ -67,7 +68,6 @@
         button.active { background: #e67e22; }
         button.active:hover { background: #d35400; }
         
-        /* モード切替ボタンの強調 */
         .mode-btn { background: #9b59b6; }
         .mode-btn:hover { background: #8e44ad; }
         
@@ -76,17 +76,20 @@
         
         .workspace {
             flex: 1;
-            overflow: auto; /* 移動モード及び通常スクロール用 */
             position: relative;
             padding: 10px;
             background: #1a252f;
         }
-        /* 移動モード時の見た目変更 */
+        /* モード別の挙動とスタイルの設定 */
         .workspace.mode-move {
+            overflow: auto; /* 移動モードのときだけスクロール可能にする */
             cursor: grab;
         }
         .workspace.mode-move:active {
             cursor: grabbing;
+        }
+        .workspace.mode-paint {
+            overflow: hidden; /* ペイントモードのときはスクロールバー自体をロックして動かさない */
         }
         .workspace.mode-paint #editor-canvas {
             cursor: crosshair;
@@ -121,6 +124,7 @@
             font-size: 12px;
             text-align: right;
             border-top: 1px solid #1a252f;
+            z-index: 20;
         }
     </style>
 </head>
@@ -137,7 +141,7 @@
 
     <!-- 操作モード（移動 vs ペイント） -->
     <div class="tool-group">
-        <button id="btn-mode-paint" class="mode-btn active" onclick="setMode('paint')">🖊️ ペイントモード</button>
+        <button id="btn-mode-paint" class="mode-btn active" onclick="setMode('paint')">🖊️ ペイントモード (移動不可)</button>
         <button id="btn-mode-move" class="mode-btn" onclick="setMode('move')">✋ 移動モード</button>
     </div>
 
@@ -155,28 +159,33 @@
         <input type="number" id="brush-size" value="5" min="1" max="100" style="width: 45px;">
     </div>
 
-    <!-- 12色パレット + カスタム -->
+    <!-- 気候用12色パレット + カスタム -->
     <div class="palette">
-        <div class="color-dot selected" style="background:#ff0000;" onclick="selectPalette(this, '#ff0000')"></div>
-        <div class="color-dot" style="background:#ff7f00;" onclick="selectPalette(this, '#ff7f00')"></div>
-        <div class="color-dot" style="background:#ffff00;" onclick="selectPalette(this, '#ffff00')"></div>
-        <div class="color-dot" style="background:#00ff00;" onclick="selectPalette(this, '#00ff00')"></div>
-        <div class="color-dot" style="background:#00ffff;" onclick="selectPalette(this, '#00ffff')"></div>
-        <div class="color-dot" style="background:#0000ff;" onclick="selectPalette(this, '#0000ff')"></div>
-        <div class="color-dot" style="background:#7f00ff;" onclick="selectPalette(this, '#7f00ff')"></div>
-        <div class="color-dot" style="background:#ff00ff;" onclick="selectPalette(this, '#ff00ff')"></div>
-        <div class="color-dot" style="background:#8b4513;" onclick="selectPalette(this, '#8b4513')"></div>
-        <div class="color-dot" style="background:#ffffff;" onclick="selectPalette(this, '#ffffff')"></div>
-        <div class="color-dot" style="background:#7f7f7f;" onclick="selectPalette(this, '#7f7f7f')"></div>
-        <div class="color-dot" style="background:#000000;" onclick="selectPalette(this, '#000000')"></div>
+        <!-- 熱帯系 -->
+        <div class="color-dot selected" style="background:#0000ff;" title="熱帯雨林" onclick="selectPalette(this, '#0000ff')"></div>
+        <div class="color-dot" style="background:#40e0d0;" title="サバナ" onclick="selectPalette(this, '#40e0d0')"></div>
+        <!-- 乾燥帯系 -->
+        <div class="color-dot" style="background:#ffcc00;" title="砂漠" onclick="selectPalette(this, '#ffcc00')"></div>
+        <div class="color-dot" style="background:#ffea88;" title="ステップ" onclick="selectPalette(this, '#ffea88')"></div>
+        <!-- 温帯系 -->
+        <div class="color-dot" style="background:#00ff00;" title="温暖湿潤" onclick="selectPalette(this, '#00ff00')"></div>
+        <div class="color-dot" style="background:#32cd32;" title="西岸海洋性" onclick="selectPalette(this, '#32cd32')"></div>
+        <div class="color-dot" style="background:#ffff00;" title="地中海性" onclick="selectPalette(this, '#ffff00')"></div>
+        <!-- 亜寒帯系 -->
+        <div class="color-dot" style="background:#993399;" title="亜寒帯湿潤" onclick="selectPalette(this, '#993399')"></div>
+        <div class="color-dot" style="background:#da70d6;" title="亜寒帯冬季少雨" onclick="selectPalette(this, '#da70d6')"></div>
+        <!-- 寒帯系・その他 -->
+        <div class="color-dot" style="background:#b0c4de;" title="ツンドラ" onclick="selectPalette(this, '#b0c4de')"></div>
+        <div class="color-dot" style="background:#ffffff;" title="氷雪" onclick="selectPalette(this, '#ffffff')"></div>
+        <div class="color-dot" style="background:#8b4513;" title="高山" onclick="selectPalette(this, '#8b4513')"></div>
+        
         <label style="margin-left:5px;">カスタム:</label>
-        <input type="color" id="color-picker" value="#ff0000" onchange="onCustomColorChange(this.value)">
+        <input type="color" id="color-picker" value="#0000ff" onchange="onCustomColorChange(this.value)">
     </div>
 
     <button id="download-btn" onclick="downloadMap()">気候地図をダウンロード</button>
 </header>
 
-<!-- workspace全体をドラッグ移動の対象にする -->
 <div class="workspace mode-paint" id="workspace">
     <div class="canvas-container">
         <img id="land-img" style="display:none;">
@@ -198,8 +207,8 @@
 
     ctx.imageSmoothingEnabled = false;
 
-    let appMode = 'paint'; // paint or move
-    let currentTool = 'pen'; // pen, eraser, fill
+    let appMode = 'paint'; 
+    let currentTool = 'pen'; 
     let isDrawing = false;
     let isClipping = true;
     let landImageData = null;
@@ -221,7 +230,7 @@
             workspace.classList.add('mode-move');
             document.getElementById('paint-tools-sub').style.opacity = "0.5";
             document.getElementById('paint-tools-sub').style.pointerEvents = "none";
-            isDrawing = false; // 強制終了
+            isDrawing = false; 
         }
         updateStatus();
     }
@@ -251,7 +260,6 @@
     }
 
     function onCustomColorChange(hexColor) {
-        // カスタム色選択時は固定パレットの選択枠を外す
         document.querySelectorAll('.color-dot').forEach(dot => dot.classList.remove('selected'));
     }
 
@@ -288,7 +296,7 @@
         reader.readAsDataURL(file);
     });
 
-    // --- 手のひら（移動）モードのスクロールロジック ---
+    // --- 移動（スクロール）モードのロジック ---
     let isMoving = false;
     let startStartX, startStartY;
     let scrollLeft, scrollTop;
@@ -308,10 +316,8 @@
         e.preventDefault();
         const x = e.pageX - workspace.offsetLeft;
         const y = e.pageY - workspace.offsetTop;
-        const walkX = (x - startStartX);
-        const walkY = (y - startStartY);
-        workspace.scrollLeft = scrollLeft - walkX;
-        workspace.scrollTop = scrollTop - walkY;
+        workspace.scrollLeft = scrollLeft - (x - startStartX);
+        workspace.scrollTop = scrollTop - (y - startStartY);
     });
 
     const stopMoving = () => { isMoving = false; };
@@ -333,7 +339,7 @@
     canvas.addEventListener('mousedown', (e) => {
         if (appMode !== 'paint') return;
         const pos = getMousePos(e);
-        if (pos.x >= 3999) return; // 右端1pxガード
+        if (pos.x >= 3999) return; 
 
         isDrawing = true;
         lastX = pos.x;
@@ -348,16 +354,17 @@
         }
     });
 
+    // 押しっぱなしでスライド（ドラッグ）したときに連続で描画するイベント
     canvas.addEventListener('mousemove', (e) => {
         const pos = getMousePos(e);
         
-        // ステータス表示更新
         let toolName = currentTool === 'pen' ? 'ペン' : currentTool === 'eraser' ? '消しゴム' : '塗りつぶし';
         statusText.textContent = `座標: (${pos.x}, ${pos.y}) | モード: ${appMode === 'paint' ? 'ペイント ('+toolName+')' : '移動'}`;
 
+        // isDrawingがtrue（マウス押下中）ならスライド描画を実行
         if (!isDrawing || appMode !== 'paint' || currentTool === 'fill') return;
         
-        drawLine(lastX, lastY, pos.x, pos.y);
+        drawLine(lastX, lastY, pos.x, pos.y); // ブレザナム補間で隙間なく塗る
         lastX = pos.x;
         lastY = pos.y;
     });
@@ -375,7 +382,7 @@
     function checkPixelClippable(x, y) {
         if (isClipping && landImageData) {
             const idx = (y * 4000 + x) * 4;
-            return landImageData[idx + 3] === 0; // アルファ0ならクリップ（描画しない）
+            return landImageData[idx + 3] === 0; 
         }
         return false;
     }
@@ -425,13 +432,11 @@
         }
     }
 
-    // 右端同調
     function syncRightEdge() {
         const leftEdgeData = ctx.getImageData(0, 0, 1, 2000);
         ctx.putImageData(leftEdgeData, 3999, 0);
     }
 
-    // 塗りつぶし
     function floodFill(startX, startY) {
         if (checkPixelClippable(startX, startY)) return;
 
