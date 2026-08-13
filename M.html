@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>4000x2000 気候地図エディタ</title>
+    <title>4000x2000 気候地図エディタ Pro</title>
     <style>
         body {
             font-family: sans-serif;
@@ -13,12 +13,13 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
+            user-select: none;
         }
         header {
             background: #34495e;
             padding: 10px 20px;
             display: flex;
-            gap: 15px;
+            gap: 12px;
             align-items: center;
             flex-wrap: wrap;
             border-bottom: 2px solid #1a252f;
@@ -26,13 +27,32 @@
         .tool-group {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             background: #2c3e50;
             padding: 5px 10px;
             border-radius: 4px;
         }
-        label { font-size: 12px; font-weight: bold; }
-        input[type="file"] { font-size: 12px; width: 150px; }
+        .palette {
+            display: flex;
+            gap: 4px;
+            background: #2c3e50;
+            padding: 5px 10px;
+            border-radius: 4px;
+            align-items: center;
+        }
+        .color-dot {
+            width: 22px;
+            height: 22px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        .color-dot.selected {
+            border-color: #ffffff;
+            box-shadow: 0 0 4px rgba(0,0,0,0.8);
+        }
+        label { font-size: 11px; font-weight: bold; color: #bdc3c7; }
+        input[type="file"] { font-size: 11px; width: 130px; }
         button {
             padding: 6px 12px;
             background: #3498db;
@@ -41,30 +61,44 @@
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
+            font-size: 13px;
         }
         button:hover { background: #2980b9; }
         button.active { background: #e67e22; }
         button.active:hover { background: #d35400; }
-        #download-btn { background: #2ecc71; }
+        
+        /* モード切替ボタンの強調 */
+        .mode-btn { background: #9b59b6; }
+        .mode-btn:hover { background: #8e44ad; }
+        
+        #download-btn { background: #2ecc71; margin-left: auto; }
         #download-btn:hover { background: #27ae60; }
         
         .workspace {
             flex: 1;
-            overflow: auto;
+            overflow: auto; /* 移動モード及び通常スクロール用 */
             position: relative;
-            padding: 20px;
-            display: flex;
-            justify-content: flex-start;
-            align-items: flex-start;
+            padding: 10px;
+            background: #1a252f;
         }
+        /* 移動モード時の見た目変更 */
+        .workspace.mode-move {
+            cursor: grab;
+        }
+        .workspace.mode-move:active {
+            cursor: grabbing;
+        }
+        .workspace.mode-paint #editor-canvas {
+            cursor: crosshair;
+        }
+
         .canvas-container {
             position: relative;
             width: 4000px;
             height: 2000px;
-            background: #34495e; /* 背景（海の部分の見え方） */
-            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            background: #2c3e50;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.7);
         }
-        /* レイヤー構造 */
         .canvas-container canvas, .canvas-container img {
             position: absolute;
             top: 0;
@@ -74,7 +108,6 @@
             image-rendering: pixelated;
             pointer-events: none;
         }
-        /* 最前面のキャンバスのみ操作可能 */
         #editor-canvas {
             pointer-events: auto;
             z-index: 10;
@@ -91,36 +124,60 @@
         }
     </style>
 </head>
-<body>
+<body class="mode-paint">
 
 <header>
+    <!-- 画像アップロード -->
     <div class="tool-group">
-        <label>1. 陸地(海透明):</label>
+        <label>陸地:</label>
         <input type="file" id="upload-land" accept="image/*">
-    </div>
-    <div class="tool-group">
-        <label>2. 標高画像:</label>
+        <label>標高:</label>
         <input type="file" id="upload-elev" accept="image/*">
     </div>
 
+    <!-- 操作モード（移動 vs ペイント） -->
     <div class="tool-group">
+        <button id="btn-mode-paint" class="mode-btn active" onclick="setMode('paint')">🖊️ ペイントモード</button>
+        <button id="btn-mode-move" class="mode-btn" onclick="setMode('move')">✋ 移動モード</button>
+    </div>
+
+    <!-- ペイントツール -->
+    <div class="tool-group" id="paint-tools-sub">
         <button id="tool-pen" class="active" onclick="setTool('pen')">ペン</button>
         <button id="tool-eraser" onclick="setTool('eraser')">消しゴム</button>
         <button id="tool-fill" onclick="setTool('fill')">塗りつぶし</button>
         <button id="tool-clip" class="active" onclick="toggleClip()">クリップ: ON</button>
     </div>
 
+    <!-- サイズ -->
     <div class="tool-group">
-        <label>色:</label>
-        <input type="color" id="color-picker" value="#ff0000">
         <label>サイズ:</label>
-        <input type="number" id="brush-size" value="5" min="1" max="100" style="width: 50px;">
+        <input type="number" id="brush-size" value="5" min="1" max="100" style="width: 45px;">
+    </div>
+
+    <!-- 12色パレット + カスタム -->
+    <div class="palette">
+        <div class="color-dot selected" style="background:#ff0000;" onclick="selectPalette(this, '#ff0000')"></div>
+        <div class="color-dot" style="background:#ff7f00;" onclick="selectPalette(this, '#ff7f00')"></div>
+        <div class="color-dot" style="background:#ffff00;" onclick="selectPalette(this, '#ffff00')"></div>
+        <div class="color-dot" style="background:#00ff00;" onclick="selectPalette(this, '#00ff00')"></div>
+        <div class="color-dot" style="background:#00ffff;" onclick="selectPalette(this, '#00ffff')"></div>
+        <div class="color-dot" style="background:#0000ff;" onclick="selectPalette(this, '#0000ff')"></div>
+        <div class="color-dot" style="background:#7f00ff;" onclick="selectPalette(this, '#7f00ff')"></div>
+        <div class="color-dot" style="background:#ff00ff;" onclick="selectPalette(this, '#ff00ff')"></div>
+        <div class="color-dot" style="background:#8b4513;" onclick="selectPalette(this, '#8b4513')"></div>
+        <div class="color-dot" style="background:#ffffff;" onclick="selectPalette(this, '#ffffff')"></div>
+        <div class="color-dot" style="background:#7f7f7f;" onclick="selectPalette(this, '#7f7f7f')"></div>
+        <div class="color-dot" style="background:#000000;" onclick="selectPalette(this, '#000000')"></div>
+        <label style="margin-left:5px;">カスタム:</label>
+        <input type="color" id="color-picker" value="#ff0000" onchange="onCustomColorChange(this.value)">
     </div>
 
     <button id="download-btn" onclick="downloadMap()">気候地図をダウンロード</button>
 </header>
 
-<div class="workspace">
+<!-- workspace全体をドラッグ移動の対象にする -->
+<div class="workspace mode-paint" id="workspace">
     <div class="canvas-container">
         <img id="land-img" style="display:none;">
         <img id="elev-img" style="display:none;">
@@ -129,57 +186,45 @@
 </div>
 
 <div class="status-bar" id="status-text">
-    座標: (0, 0) | ツール: ペン
+    座標: (0, 0) | モード: ペイント (ペン)
 </div>
 
 <script>
     const canvas = document.getElementById('editor-canvas');
     const ctx = canvas.getContext('2d');
+    const workspace = document.getElementById('workspace');
     const statusText = document.getElementById('status-text');
+    const colorPicker = document.getElementById('color-picker');
 
     ctx.imageSmoothingEnabled = false;
 
-    let currentTool = 'pen';
+    let appMode = 'paint'; // paint or move
+    let currentTool = 'pen'; // pen, eraser, fill
     let isDrawing = false;
-    let isClipping = true; // デフォルトでクリップON
-    
-    // クリップ判定用の陸地データ保持変数
+    let isClipping = true;
     let landImageData = null;
 
-    // 陸地画像アップロード
-    document.getElementById('upload-land').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            const img = document.getElementById('land-img');
-            img.src = event.target.result;
-            img.style.display = 'block';
-            img.onload = function() {
-                // クリップ（透明度判定）用にデータをメモリ上にロード
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = 4000;
-                tempCanvas.height = 2000;
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCtx.drawImage(img, 0, 0, 4000, 2000);
-                landImageData = tempCtx.getImageData(0, 0, 4000, 2000).data;
-            }
-        }
-        reader.readAsDataURL(file);
-    });
+    // --- モード・ツール切り替え ---
+    function setMode(mode) {
+        appMode = mode;
+        document.getElementById('btn-mode-paint').classList.remove('active');
+        document.getElementById('btn-mode-move').classList.remove('active');
+        workspace.classList.remove('mode-paint', 'mode-move');
 
-    // 標高画像アップロード
-    document.getElementById('upload-elev').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            const img = document.getElementById('elev-img');
-            img.src = event.target.result;
-            img.style.display = 'block';
+        if (mode === 'paint') {
+            document.getElementById('btn-mode-paint').classList.add('active');
+            workspace.classList.add('mode-paint');
+            document.getElementById('paint-tools-sub').style.opacity = "1";
+            document.getElementById('paint-tools-sub').style.pointerEvents = "auto";
+        } else {
+            document.getElementById('btn-mode-move').classList.add('active');
+            workspace.classList.add('mode-move');
+            document.getElementById('paint-tools-sub').style.opacity = "0.5";
+            document.getElementById('paint-tools-sub').style.pointerEvents = "none";
+            isDrawing = false; // 強制終了
         }
-        reader.readAsDataURL(file);
-    });
+        updateStatus();
+    }
 
     function setTool(tool) {
         currentTool = tool;
@@ -193,20 +238,88 @@
     function toggleClip() {
         isClipping = !isClipping;
         const btn = document.getElementById('tool-clip');
-        if(isClipping) {
-            btn.textContent = "クリップ: ON";
-            btn.classList.add('active');
-        } else {
-            btn.textContent = "クリップ: OFF";
-            btn.classList.remove('active');
-        }
+        btn.textContent = isClipping ? "クリップ: ON" : "クリップ: OFF";
+        if(isClipping) btn.classList.add('active');
+        else btn.classList.remove('active');
     }
 
-    canvas.addEventListener('mousedown', startDrawing);
-    canvas.addEventListener('mousemove', draw);
-    canvas.addEventListener('mouseup', stopDrawing);
-    canvas.addEventListener('mouseleave', stopDrawing);
+    // --- カラーパレット処理 ---
+    function selectPalette(element, hexColor) {
+        document.querySelectorAll('.color-dot').forEach(dot => dot.classList.remove('selected'));
+        element.classList.add('selected');
+        colorPicker.value = hexColor;
+    }
 
+    function onCustomColorChange(hexColor) {
+        // カスタム色選択時は固定パレットの選択枠を外す
+        document.querySelectorAll('.color-dot').forEach(dot => dot.classList.remove('selected'));
+    }
+
+    // --- 画像アップロード ---
+    document.getElementById('upload-land').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const img = document.getElementById('land-img');
+            img.src = event.target.result;
+            img.style.display = 'block';
+            img.onload = function() {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = 4000;
+                tempCanvas.height = 2000;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.drawImage(img, 0, 0, 4000, 2000);
+                landImageData = tempCtx.getImageData(0, 0, 4000, 2000).data;
+            }
+        }
+        reader.readAsDataURL(file);
+    });
+
+    document.getElementById('upload-elev').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const img = document.getElementById('elev-img');
+            img.src = event.target.result;
+            img.style.display = 'block';
+        }
+        reader.readAsDataURL(file);
+    });
+
+    // --- 手のひら（移動）モードのスクロールロジック ---
+    let isMoving = false;
+    let startStartX, startStartY;
+    let scrollLeft, scrollTop;
+
+    workspace.addEventListener('mousedown', (e) => {
+        if (appMode === 'move') {
+            isMoving = true;
+            startStartX = e.pageX - workspace.offsetLeft;
+            startStartY = e.pageY - workspace.offsetTop;
+            scrollLeft = workspace.scrollLeft;
+            scrollTop = workspace.scrollTop;
+        }
+    });
+
+    workspace.addEventListener('mousemove', (e) => {
+        if (!isMoving || appMode !== 'move') return;
+        e.preventDefault();
+        const x = e.pageX - workspace.offsetLeft;
+        const y = e.pageY - workspace.offsetTop;
+        const walkX = (x - startStartX);
+        const walkY = (y - startStartY);
+        workspace.scrollLeft = scrollLeft - walkX;
+        workspace.scrollTop = scrollTop - walkY;
+    });
+
+    const stopMoving = () => { isMoving = false; };
+    workspace.addEventListener('mouseup', stopMoving);
+    workspace.addEventListener('mouseleave', stopMoving);
+
+
+    // --- ペイントモードのロジック ---
     let lastX = 0;
     let lastY = 0;
 
@@ -217,9 +330,10 @@
         return { x, y };
     }
 
-    function startDrawing(e) {
+    canvas.addEventListener('mousedown', (e) => {
+        if (appMode !== 'paint') return;
         const pos = getMousePos(e);
-        if (pos.x >= 3999) return; // 右端1pxは操作不可
+        if (pos.x >= 3999) return; // 右端1pxガード
 
         isDrawing = true;
         lastX = pos.x;
@@ -232,33 +346,36 @@
         } else {
             drawPixel(pos.x, pos.y);
         }
-    }
+    });
 
-    function draw(e) {
+    canvas.addEventListener('mousemove', (e) => {
         const pos = getMousePos(e);
-        statusText.textContent = `座標: (${pos.x}, ${pos.y}) | ツール: ${currentTool === 'pen' ? 'ペン' : currentTool === 'eraser' ? '消しゴム' : '塗りつぶし'}`;
+        
+        // ステータス表示更新
+        let toolName = currentTool === 'pen' ? 'ペン' : currentTool === 'eraser' ? '消しゴム' : '塗りつぶし';
+        statusText.textContent = `座標: (${pos.x}, ${pos.y}) | モード: ${appMode === 'paint' ? 'ペイント ('+toolName+')' : '移動'}`;
 
-        if (!isDrawing || currentTool === 'fill') return;
+        if (!isDrawing || appMode !== 'paint' || currentTool === 'fill') return;
         
         drawLine(lastX, lastY, pos.x, pos.y);
-        
         lastX = pos.x;
         lastY = pos.y;
-    }
+    });
 
-    function stopDrawing() {
-        if(isDrawing) {
+    const stopDrawing = () => {
+        if (isDrawing) {
             isDrawing = false;
             syncRightEdge();
         }
-    }
+    };
+    canvas.addEventListener('mouseup', stopDrawing);
+    canvas.addEventListener('mouseleave', stopDrawing);
 
-    // 単一ピクセルの描画チェック（クリップ機能の核）
+    // クリップ判定
     function checkPixelClippable(x, y) {
         if (isClipping && landImageData) {
             const idx = (y * 4000 + x) * 4;
-            const alpha = landImageData[idx + 3];
-            if (alpha === 0) return true; // 透明部分なので描画をスキップ（クリップする）
+            return landImageData[idx + 3] === 0; // アルファ0ならクリップ（描画しない）
         }
         return false;
     }
@@ -267,9 +384,8 @@
         if (x >= 3999 || x < 0 || y < 0 || y >= 2000) return;
 
         const size = parseInt(document.getElementById('brush-size').value);
-        const color = document.getElementById('color-picker').value;
+        const color = colorPicker.value;
 
-        // ブラシサイズに合わせて矩形を描画する際も、1ピクセルずつクリップ判定を行う
         const half = Math.floor(size / 2);
         const startX = x - half;
         const startY = y - half;
@@ -280,7 +396,7 @@
                 const py = startY + dy;
 
                 if (px >= 3999 || px < 0 || py < 0 || py >= 2000) continue;
-                if (checkPixelClippable(px, py)) continue; // ★透明なら乗せない
+                if (checkPixelClippable(px, py)) continue;
 
                 if (currentTool === 'eraser') {
                     ctx.clearRect(px, py, 1, 1);
@@ -290,10 +406,7 @@
                 }
             }
         }
-        
-        if (startX <= 0) {
-            syncRightEdge();
-        }
+        if (startX <= 0) syncRightEdge();
     }
 
     function drawLine(x0, y0, x1, y1) {
@@ -312,17 +425,17 @@
         }
     }
 
-    // 右端1pxに左端1pxを完全同期
+    // 右端同調
     function syncRightEdge() {
         const leftEdgeData = ctx.getImageData(0, 0, 1, 2000);
         ctx.putImageData(leftEdgeData, 3999, 0);
     }
 
-    // 塗りつぶし (Flood Fill)
+    // 塗りつぶし
     function floodFill(startX, startY) {
-        if (checkPixelClippable(startX, startY)) return; // クリックした場所がすでにクリップ対象なら何もしない
+        if (checkPixelClippable(startX, startY)) return;
 
-        const colorHex = document.getElementById('color-picker').value;
+        const colorHex = colorPicker.value;
         const targetR = parseInt(colorHex.substring(1,3), 16);
         const targetG = parseInt(colorHex.substring(3,5), 16);
         const targetB = parseInt(colorHex.substring(5,7), 16);
@@ -343,16 +456,12 @@
 
         while (queue.length > 0) {
             const [x, y] = queue.pop();
-            if (x < 0 || x >= 3999 || y < 0 || y >= 2000) continue; 
+            if (x < 0 || x >= 3999 || y < 0 || y >= 2000) continue;
 
             const idx = (y * 4000 + x) * 4;
 
             if (data[idx] === startR && data[idx+1] === startG && data[idx+2] === startB && data[idx+3] === startA) {
-                
-                // クリップ判定：陸地画像で透明(アルファが0)の場所なら塗りつぶしをスキップ
-                if (isClipping && landImageData && landImageData[idx+3] === 0) {
-                    continue; 
-                }
+                if (isClipping && landImageData && landImageData[idx+3] === 0) continue;
 
                 data[idx] = targetR;
                 data[idx+1] = targetG;
@@ -369,7 +478,8 @@
     }
 
     function updateStatus() {
-        statusText.textContent = `座標: (0, 0) | ツール: ${currentTool === 'pen' ? 'ペン' : currentTool === 'eraser' ? '消しゴム' : '塗りつぶし'}`;
+        let toolName = currentTool === 'pen' ? 'ペン' : currentTool === 'eraser' ? '消しゴム' : '塗りつぶし';
+        statusText.textContent = `座標: (0, 0) | モード: ${appMode === 'paint' ? 'ペイント ('+toolName+')' : '移動'}`;
     }
 
     function downloadMap() {
